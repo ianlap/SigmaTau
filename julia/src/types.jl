@@ -85,27 +85,6 @@ _default_mlist(N::Int, min_factor::Int) =
     [2^k for k in 0:floor(Int, log2(N / min_factor))]
 
 """
-    _make_result(tau, dev, alpha_float, neff, tau0, N, method, confidence)
-
-Construct a `DeviationResult` with NaN EDF and CI placeholders.
-EDF and CI are filled by `compute_ci` in stats.jl.
-"""
-function _make_result(tau, dev, alpha_float, neff, tau0, N::Int,
-                      method::String, confidence)
-    L = length(dev)
-    alpha_int = Vector{Int}(undef, L)
-    for i in 1:L
-        alpha_int[i] = isnan(alpha_float[i]) ? 0 : round(Int, alpha_float[i])
-    end
-    DeviationResult(
-        Float64.(tau), Float64.(dev),
-        fill(NaN, L), fill(NaN, L, 2),
-        alpha_int, Vector{Int}(neff),
-        Float64(tau0), N, method, Float64(confidence)
-    )
-end
-
-"""
     detrend_linear(x)
 
 Remove linear trend from data via least-squares fit.

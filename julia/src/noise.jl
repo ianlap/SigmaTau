@@ -2,8 +2,6 @@
 # Ported from legacy StabLab.jl noise.jl
 # References: NIST SP1065 Section 5.6; Riley & Howe
 
-using Statistics
-
 """
     noise_id(x, m_list, data_type="phase", dmin=0, dmax=2) → Vector{Float64}
 
@@ -129,7 +127,7 @@ function _noise_id_b1rn(x::Vector{Float64}, m::Int, data_type::String)
         throw(ArgumentError("data_type must be \"phase\" or \"freq\""))
     end
 
-    isnan(avar_val) || avar_val <= 0 && return (0, -2, NaN)
+    (isnan(avar_val) || avar_val <= 0) && return (0, -2, NaN)
 
     B1_obs = var_class / avar_val
 

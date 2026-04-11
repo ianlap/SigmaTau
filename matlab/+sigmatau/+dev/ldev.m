@@ -1,5 +1,5 @@
 function result = ldev(x, tau0, m_list, varargin)
-% LDEV  Hadamard time deviation (LDEV). Wraps mhdev, scales by tau/sqrt(10/3).
+% LDEV  Lapinski deviation (LDEV). Wraps mhdev, scales by tau/sqrt(10/3).
 %
 %   result = sigmatau.dev.ldev(x, tau0)
 %   result = sigmatau.dev.ldev(x, tau0, m_list)
