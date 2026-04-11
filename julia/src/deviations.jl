@@ -22,9 +22,10 @@ The kernel computes the overlapping estimator:
 CI is NaN until `compute_ci` is called.
 """
 function adev(
-    x      :: AbstractVector{<:Real},
-    tau0   :: Real;
-    m_list :: Union{Nothing, AbstractVector{<:Integer}} = nothing,
+    x         :: AbstractVector{<:Real},
+    tau0      :: Real;
+    m_list    :: Union{Nothing, AbstractVector{<:Integer}} = nothing,
+    data_type :: Symbol = :phase,
 )
     params = DevParams(
         "adev",         # name
@@ -38,7 +39,7 @@ function adev(
         false,          # needs_bias
         "",             # bias_type (unused)
     )
-    return engine(x, tau0, m_list, _adev_kernel, params)
+    return engine(x, tau0, m_list, _adev_kernel, params; data_type)
 end
 
 # Kernel: returns (variance, neff)  — engine takes sqrt internally

@@ -25,12 +25,21 @@ and result construction.
   internally; the engine loop is identical for all deviation types.
 """
 function engine(
-    x       :: AbstractVector{<:Real},
-    tau0    :: Real,
-    m_list  :: Union{Nothing, AbstractVector{<:Integer}},
-    kernel  :: Function,
-    params  :: DevParams,
+    x         :: AbstractVector{<:Real},
+    tau0      :: Real,
+    m_list    :: Union{Nothing, AbstractVector{<:Integer}},
+    kernel    :: Function,
+    params    :: DevParams;
+    data_type :: Symbol = :phase,
 )
+    # Frequency-to-phase conversion — CLAUDE.md §Architecture
+    # cumsum(y)*tau0 produces phase in seconds from fractional-frequency samples.
+    if data_type === :freq
+        x = cumsum(x) .* tau0
+    elseif data_type !== :phase
+        throw(ArgumentError("data_type must be :phase or :freq, got :$data_type"))
+    end
+
     x    = validate_phase_data(x)
     tau0 = validate_tau0(tau0)
     N    = length(x)

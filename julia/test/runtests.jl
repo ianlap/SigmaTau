@@ -175,4 +175,31 @@ using SigmaTau
         @test isapprox(slope_wfm, -0.5; atol=0.15)
     end
 
+    @testset "adev data_type=:freq matches manual freq→phase conversion" begin
+        Random.seed!(77)
+        N    = 512
+        tau0 = 1.0
+        y    = randn(N)   # fractional-frequency samples
+
+        # Engine path: pass freq data directly
+        r_freq = adev(y, tau0; data_type=:freq)
+
+        # Manual path: convert first, then call adev on phase
+        x_phase = cumsum(y) .* tau0
+        r_phase = adev(x_phase, tau0)
+
+        @test r_freq.tau  == r_phase.tau
+        @test r_freq.neff == r_phase.neff
+        # NaN positions must match; non-NaN values must agree to floating-point precision
+        nan_freq  = isnan.(r_freq.deviation)
+        nan_phase = isnan.(r_phase.deviation)
+        @test nan_freq == nan_phase
+        @test r_freq.deviation[.!nan_freq] ≈ r_phase.deviation[.!nan_phase]  rtol=1e-12
+    end
+
+    @testset "adev rejects unknown data_type" begin
+        x = cumsum(randn(64))
+        @test_throws ArgumentError adev(x, 1.0; data_type=:bad)
+    end
+
 end  # @testset "SigmaTau"
