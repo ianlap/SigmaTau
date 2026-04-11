@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(julia *)",
+      "Bash(matlab -batch *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(git push *)"
+    ]
+  }
+}
