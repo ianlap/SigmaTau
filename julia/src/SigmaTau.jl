@@ -26,6 +26,7 @@ export validate_phase_data, validate_tau0
 export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
 export totdev, mtotdev, htotdev, mhtotdev
+export KalmanConfig, KalmanResult, kalman_filter, safe_sqrt
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
@@ -35,5 +36,6 @@ include("noise.jl")      # noise_id and supporting functions
 include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
+include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
 
 end # module
