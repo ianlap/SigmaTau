@@ -202,4 +202,8 @@ using SigmaTau
         @test_throws ArgumentError adev(x, 1.0; data_type=:bad)
     end
 
+    include("test_allan_family.jl")
+    include("test_hadamard_family.jl")
+    include("test_total_family.jl")
+
 end  # @testset "SigmaTau"
