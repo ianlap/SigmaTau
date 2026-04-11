@@ -22,3 +22,6 @@ Thumbs.db
 # Results (generated, not tracked)
 results/
 steering_results/
+
+# Reference PDFs (local only)
+*.pdf

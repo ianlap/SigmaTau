@@ -79,3 +79,9 @@ Every refactored function must produce identical numerical output to the legacy 
 - NIST SP1065: Riley & Howe, "Handbook of Frequency Stability Analysis"
 - Greenhall & Riley, "Uncertainty of Stability Variances," PTTI 2003
 - IEEE Std 1139-2022
+
+## Known Legacy Bugs (must be correct in new code)
+- htotdev bias correction: verify direction (multiply vs divide) against SP1065 and Julia output
+- htotdev EDF loop: after trimming invalid taus, loop over numel(tau) not numel(valid)
+- mhtotdev Neff: verify segment count formula — is it N-4m+1 or N-3m? Check against Riley and Julia
+- totdev denominator: SP1065 §5.2.11 uses 2(N-1)(mτ₀)², not 2(N-2)(mτ₀)²

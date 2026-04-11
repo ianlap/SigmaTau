@@ -15,7 +15,9 @@
       "Bash(head *)",
       "Bash(tail *)",
       "Bash(wc *)",
-      "Bash(diff *)"
+      "Bash(diff *)",
+      "Bash(cd /home/ian/SigmaTau && *)",
+      "Bash(cd * && git *)"
     ],
     "deny": [
       "Bash(rm -rf /)",
