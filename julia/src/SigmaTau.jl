@@ -24,7 +24,7 @@ export compute_ci, bias_correction, edf_for_result
 export noise_id
 export validate_phase_data, validate_tau0
 export unpack_result
-export adev
+export adev, mdev, tdev
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
