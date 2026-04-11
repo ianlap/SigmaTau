@@ -76,7 +76,7 @@ function calculate_edf(alpha::Int, d::Int, m::Int, F::Int, S::Int, N::Int)
     M = 1 + floor(Int, S * (N - L) / m)   # number of summands
     J = min(M, (d + 1) * S)               # truncation parameter (Greenhall 2003)
 
-    sz0        = _compute_sz(0,    F, alpha, d)
+    sz0        = Float64(_compute_sz(0.0, F, alpha, d))   # 0.0 ensures Float64 throughout
     basic_sum  = _compute_basic_sum(J, M, S, F, alpha, d, sz0)
 
     basic_sum > 0 || return NaN

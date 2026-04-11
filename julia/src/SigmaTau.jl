@@ -24,6 +24,7 @@ export compute_ci, bias_correction, edf_for_result
 export noise_id
 export validate_phase_data, validate_tau0
 export unpack_result
+export adev
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
@@ -32,5 +33,6 @@ include("validate.jl")   # validate_phase_data, validate_tau0, detrend_*
 include("noise.jl")      # noise_id and supporting functions
 include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
+include("deviations.jl") # thin wrappers: adev, …
 
 end # module

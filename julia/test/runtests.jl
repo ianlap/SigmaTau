@@ -129,4 +129,50 @@ using SigmaTau
         @test all(r1.ci[:, 2] .> r1.deviation)   # upper > deviation
     end
 
+    @testset "adev public API — returns DeviationResult" begin
+        Random.seed!(1234)
+        x = cumsum(randn(512))
+        r = adev(x, 1.0)
+        @test r isa DeviationResult
+        @test r.method == "adev"
+        @test length(r.tau) > 0
+        @test all(r.tau .> 0)
+        @test all(d -> isnan(d) || d > 0, r.deviation)
+
+        # explicit m_list
+        r2 = adev(x, 1.0; m_list=[1, 2, 4, 8])
+        @test r2.tau == [1.0, 2.0, 4.0, 8.0]
+    end
+
+    @testset "adev noise slopes" begin
+        # Fit log-log slope: log(adev) ~ slope * log(tau)
+        # via least-squares on non-NaN points.
+        function fit_slope(tau, dev)
+            mask = .!isnan.(dev) .& (dev .> 0)
+            lt = log.(tau[mask])
+            ld = log.(dev[mask])
+            # slope = cov(lt, ld) / var(lt)
+            lt_c = lt .- sum(lt) / length(lt)
+            ld_c = ld .- sum(ld) / length(ld)
+            return sum(lt_c .* ld_c) / sum(lt_c .^ 2)
+        end
+
+        N = 4096
+        tau0 = 1.0
+
+        # White PM (α=2): phase is white noise → ADEV slope ≈ τ^{-1}
+        Random.seed!(42)
+        x_wpm = randn(N)
+        r_wpm = adev(x_wpm, tau0)
+        slope_wpm = fit_slope(r_wpm.tau, r_wpm.deviation)
+        @test isapprox(slope_wpm, -1.0; atol=0.15)
+
+        # White FM (α=0): phase is cumsum of white noise → ADEV slope ≈ τ^{-1/2}
+        Random.seed!(43)
+        x_wfm = cumsum(randn(N))
+        r_wfm = adev(x_wfm, tau0)
+        slope_wfm = fit_slope(r_wfm.tau, r_wfm.deviation)
+        @test isapprox(slope_wfm, -0.5; atol=0.15)
+    end
+
 end  # @testset "SigmaTau"
