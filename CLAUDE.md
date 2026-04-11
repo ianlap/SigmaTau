@@ -30,6 +30,8 @@ cd julia && julia --project=. -e 'using Pkg; Pkg.test()'
 
 IMPORTANT: All 10 deviation functions share a common engine. Do NOT duplicate boilerplate across deviation functions. Each deviation is a thin wrapper that passes a kernel function to the shared engine.
 
+IMPORTANT: All deviation functions accept both phase and frequency data via a `data_type` keyword (:phase default, :freq). Frequency-to-phase conversion (cumsum(y)*tau0) lives in the engine so every wrapper gets it for free. Do NOT implement conversion in individual wrappers.
+
 ```
 matlab/+sigmatau/
   +dev/engine.m          — shared deviation computation (validate, loop, edf, ci)
