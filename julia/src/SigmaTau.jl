@@ -29,7 +29,7 @@ export totdev, mtotdev, htotdev, mhtotdev
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
-include("types.jl")      # DeviationResult, DevParams, _make_result, helpers
+include("types.jl")      # DeviationResult, DevParams, helpers
 include("validate.jl")   # validate_phase_data, validate_tau0, detrend_*
 include("noise.jl")      # noise_id and supporting functions
 include("stats.jl")      # EDF, CI, bias correction
