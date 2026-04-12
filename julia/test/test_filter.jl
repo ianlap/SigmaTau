@@ -172,7 +172,7 @@ using Statistics
         @test res.q_rwfm >= 0.0
         @test isfinite(res.weighted_rms)
         @test res.n_evaluations > 0
-        @test size(res.search_history, 2) == 5   # [q_wpm q_wfm q_rwfm q_irwfm cost]
+        @test size(res.search_history, 2) == 5   # columns: [q_wpm q_wfm q_rwfm q_irwfm cost]
     end
 
 end  # @testset "Kalman filter"

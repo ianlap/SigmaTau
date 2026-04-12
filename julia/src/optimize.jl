@@ -33,7 +33,7 @@ end
 Output of `kf_optimize`.
 
 # Fields
-- `q_wpm::Float64`: Optimal (fixed) WPM noise variance
+- `q_wpm::Float64`: Fixed WPM noise variance (held constant during optimization)
 - `q_wfm::Float64`: Optimal WFM noise variance
 - `q_rwfm::Float64`: Optimal RWFM noise variance
 - `q_irwfm::Float64`: Optimal IRWFM noise variance
