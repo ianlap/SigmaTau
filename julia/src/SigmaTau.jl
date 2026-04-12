@@ -27,6 +27,9 @@ export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
 export totdev, mtotdev, htotdev, mhtotdev
 export KalmanConfig, KalmanResult, kalman_filter, safe_sqrt
+export kf_filter                                   # alias for kalman_filter
+export PredictConfig, PredictResult, kf_predict
+export OptimizeConfig, OptimizeResult, kf_optimize
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
@@ -37,5 +40,10 @@ include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
 include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
+include("predict.jl")    # PredictConfig, PredictResult, kf_predict
+include("optimize.jl")   # OptimizeConfig, OptimizeResult, kf_optimize
+
+# kf_filter is an alias for kalman_filter (matches problem-statement export name)
+const kf_filter = kalman_filter
 
 end # module
