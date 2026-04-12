@@ -76,7 +76,7 @@ z = t - (c(1) + c(2)*t + c(3)*t^2) / (1 + d(1)*t + d(2)*t^2 + d(3)*t^3);
 end
 
 function Kn = kn_from_alpha(alpha)
-% SP1065 Kn factors per noise type.
+% SP1065 Appendix A, Table A-1: Kn factors per noise type.
 switch round(alpha)
     case -2;  Kn = 0.75;
     case -1;  Kn = 0.77;

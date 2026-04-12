@@ -14,7 +14,7 @@ try
     sigmatau.noise.generate(0, 101);
     error('generate: should have thrown for odd N');
 catch err
-    assert(~isempty(strfind(err.message, 'even')), ...
+    assert(~isempty(strfind(err.message, 'even')) || contains(err.message, 'even'), ...
            'generate: wrong error for odd N');
 end
 

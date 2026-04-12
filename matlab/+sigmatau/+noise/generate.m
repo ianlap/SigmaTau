@@ -43,7 +43,7 @@ phase = 2 * pi * rand(N/2 - 1, 1);
 half              = zeros(N/2 + 1, 1);
 half(1)           = 0;                              % DC = 0
 half(2:N/2)       = S_f(1:end-1) .* exp(1j*phase); % positive freqs
-half(N/2 + 1)     = 0;                              % Nyquist = 0
+half(N/2 + 1)     = 0;                              % Nyquist forced to 0 → real-valued IFFT output
 
 % Mirror to conjugate-symmetric full spectrum
 full = [half; conj(flipud(half(2:N/2)))];
