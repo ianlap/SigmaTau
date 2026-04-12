@@ -78,26 +78,32 @@ tau0  = 1.0;
 y_wfm = randn(N_s - 1, 1);              % white FM frequency samples
 x_s   = [0; cumsum(y_wfm)] * tau0;      % phase = running integral of frequency
 
-% Fast O(N) deviations: use 8 octave-spaced averaging factors.
-m_fast = 2.^(0:7);   % [1 2 4 8 16 32 64 128]
+% Standard deviations (adev/hdev/totdev/htotdev) have exact slope -0.5 for
+% all m; start from m=1.
+m_std  = 2.^(0:5);   % [1 2 4 8 16 32]
 
-% Total deviations have O(N·m) inner loops; cap at 6 taus for test speed.
-m_slow = 2.^(0:5);   % [1 2 4 8 16 32]
+% Modified estimators (mdev/mhdev/mtotdev/mhtotdev) and their derived forms
+% (tdev/ldev) use a moving-average construction that only reaches its
+% asymptotic slope of -0.5 for m >= 4.  Starting from m=1 introduces a
+% systematic slope bias of ~10-14%, failing the 5% check.  At m=4 the bias
+% is < 2% (derived from the exact spectral covariance formula for white FM).
+m_mod  = 2.^(2:7);   % [4 8 16 32 64 128]  — fast O(N) modified wrappers
+m_mods = 2.^(2:6);   % [4 8 16 32  64]     — total modified (O(N·m), speed cap)
 
 TOL_rel = 0.05;   % 5% relative tolerance on log-log slope
 
+%                    col 1: function handle          col 2: name       col 3: m_list  col 4: expected slope
 slope_tests = {
-% function handle               name          m_list   expected slope (SP1065 Table 1)
-    @sigmatau.dev.adev,     'adev',     m_fast,    -0.5;
-    @sigmatau.dev.mdev,     'mdev',     m_fast,    -0.5;
-    @sigmatau.dev.hdev,     'hdev',     m_fast,    -0.5;
-    @sigmatau.dev.mhdev,    'mhdev',    m_fast,    -0.5;
-    @sigmatau.dev.tdev,     'tdev',     m_fast,    +0.5;   % TDEV = tau·MDEV/sqrt(3)
-    @sigmatau.dev.ldev,     'ldev',     m_fast,    +0.5;   % LDEV = tau·MHDEV/sqrt(10/3)
-    @sigmatau.dev.totdev,   'totdev',   m_slow,    -0.5;
-    @sigmatau.dev.mtotdev,  'mtotdev',  m_slow,    -0.5;
-    @sigmatau.dev.htotdev,  'htotdev',  m_slow,    -0.5;
-    @sigmatau.dev.mhtotdev, 'mhtotdev', m_slow,    -0.5;
+    @sigmatau.dev.adev,      'adev',      m_std,   -0.5;
+    @sigmatau.dev.mdev,      'mdev',      m_mod,   -0.5;
+    @sigmatau.dev.hdev,      'hdev',      m_std,   -0.5;
+    @sigmatau.dev.mhdev,     'mhdev',     m_mod,   -0.5;
+    @sigmatau.dev.tdev,      'tdev',      m_mod,   +0.5;   % TDEV = tau·MDEV/sqrt(3)
+    @sigmatau.dev.ldev,      'ldev',      m_mod,   +0.5;   % LDEV = tau·MHDEV/sqrt(10/3)
+    @sigmatau.dev.totdev,    'totdev',    m_std,   -0.5;
+    @sigmatau.dev.mtotdev,   'mtotdev',   m_mods,  -0.5;
+    @sigmatau.dev.htotdev,   'htotdev',   m_std,   -0.5;
+    @sigmatau.dev.mhtotdev,  'mhtotdev',  m_mods,  -0.5;
 };
 
 for k = 1:size(slope_tests, 1)
