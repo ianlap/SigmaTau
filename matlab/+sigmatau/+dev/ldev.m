@@ -10,8 +10,10 @@ function result = ldev(x, tau0, m_list, varargin)
 
 if nargin < 3, m_list = []; end
 
+LDEV_MHDEV_PREFACTOR = sqrt(10/3);   % LDEV = tau * MHDEV / √(10/3)
+
 mr    = sigmatau.dev.mhdev(x, tau0, m_list, varargin{:});
-scale = mr.tau / sqrt(10/3);   % row vector
+scale = mr.tau / LDEV_MHDEV_PREFACTOR;   % row vector
 
 result = mr;
 result.deviation = scale .* mr.deviation;

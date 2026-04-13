@@ -24,6 +24,8 @@ function result = engine(x, tau0, m_list, kernel, params, varargin)
 %     result – struct with fields: tau, deviation, edf, ci, alpha, neff,
 %              tau0, N, method, confidence
 
+CONFIDENCE_DEFAULT = 0.683;   % 1σ (68.3%) — SP1065 default confidence level
+
 % Parse name-value options
 p = inputParser;
 addParameter(p, 'data_type', 'phase');
@@ -113,14 +115,17 @@ result = struct( ...
     'tau0',       tau0,       ...
     'N',          N,          ...
     'method',     params.name,...
-    'confidence', 0.683       ...
+    'confidence', CONFIDENCE_DEFAULT ...
 );
 
-% Bias correction (applied in-place; only for total deviations)
+% Bias correction (applied in-place; only for total deviations) — must run
+% before CI so intervals bracket the bias-corrected deviation.
 bias_type = bias_type_for_name(params.name);
 if ~isempty(bias_type)
     result = apply_bias(result, bias_type, T_rec);
 end
+
+result.ci = sigmatau.stats.ci(result);
 end
 
 % ── Helpers ───────────────────────────────────────────────────────────────────
@@ -152,6 +157,7 @@ end
 end
 
 function result = empty_result(name, tau0, N)
+CONFIDENCE_DEFAULT = 0.683;
 result = struct( ...
     'tau',        zeros(1,0), ...
     'deviation',  zeros(1,0), ...
@@ -162,19 +168,13 @@ result = struct( ...
     'tau0',       tau0,       ...
     'N',          N,          ...
     'method',     name,       ...
-    'confidence', 0.683       ...
+    'confidence', CONFIDENCE_DEFAULT ...
 );
 end
 
 function result = apply_bias(result, bias_type, T_rec)
-% Divide deviation (and CI if not NaN) by bias factor B(alpha).
-B = sigmatau.stats.bias_correction(result.alpha, bias_type, result.tau, T_rec);
-B = B(:)';   % ensure row vector
-
-result.deviation = result.deviation ./ B;
-
-if any(~isnan(result.ci(:)))
-    % ci is Lx2; B is 1xL → replicate
-    result.ci = result.ci ./ repmat(B(:), 1, 2);
-end
+% Divide deviation by bias factor B(alpha). CI is filled after this step,
+% so no rescaling of CI is needed here.
+B = sigmatau.stats.bias(result.alpha, bias_type, result.tau, T_rec);
+result.deviation = result.deviation ./ B(:)';
 end

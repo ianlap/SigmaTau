@@ -50,11 +50,11 @@ x = x(:);
 x_mean = mean(x);
 x_std  = std(x);
 if x_std < eps
-    x_out = sigmatau.util.detrend_linear(x);
+    x_out = sigmatau.util.detrend(x, 1);
     return;
 end
 z     = abs((x - x_mean) / x_std);
-x_out = sigmatau.util.detrend_linear(x(z < 5.0));
+x_out = sigmatau.util.detrend(x(z < 5.0), 1);
 end
 
 % ── Lag-1 ACF method ──────────────────────────────────────────────────────────
@@ -65,11 +65,11 @@ if strcmpi(data_type, 'phase')
     if m > 1
         x = x(1:m:end);
     end
-    x = sigmatau.util.detrend_quadratic(x);
+    x = sigmatau.util.detrend(x, 2);
 elseif strcmpi(data_type, 'freq')
     N = floor(numel(x) / m) * m;
     x = mean(reshape(x(1:N), m, []), 1)';
-    x = sigmatau.util.detrend_linear(x);
+    x = sigmatau.util.detrend(x, 1);
 else
     error('SigmaTau:identify', 'data_type must be ''phase'' or ''freq''');
 end
@@ -109,7 +109,7 @@ function alpha_int = identify_b1rn(x, m, data_type)
 % This avoids the Julia operator-precedence bug fixed in PR #7.
 if strcmpi(data_type, 'phase')
     x_dec = x(1:m:end);
-    x_dec = sigmatau.util.detrend_quadratic(x_dec);
+    x_dec = sigmatau.util.detrend(x_dec, 2);
     avar_val   = simple_avar(x_dec, 1);
     N_avar     = numel(x_dec) - 2;
 
@@ -131,7 +131,7 @@ elseif strcmpi(data_type, 'freq')
         return;
     end
     y_avg     = mean(reshape(x(1:N), m, []), 1)';
-    y_avg     = sigmatau.util.detrend_linear(y_avg);
+    y_avg     = sigmatau.util.detrend(y_avg, 1);
     dy        = diff(y_avg);
     var_class = var(y_avg, 0);
     avar_val  = sum(dy.^2) / (2 * (numel(y_avg) - 1));
@@ -183,24 +183,27 @@ end
 % ── B1 / R(n) theory ─────────────────────────────────────────────────────────
 
 function B1 = b1_theory(N, mu)
-% Theoretical B1 ratio for slope mu. SP1065 §5.6.
+% Theoretical B1 = classical-var / Allan-var vs. noise slope mu.
+% Closed forms for integer mu; SP1065 Eq. 75 (Howe–Beard 1998) otherwise.
 switch mu
-    case 2;  B1 = N*(N+1)/6;
-    case 1;  B1 = N/2;
-    case 0;  B1 = N*log(N) / (2*(N-1)*log(2));
-    case -1; B1 = 1.0;
-    case -2; B1 = (N^2 - 1) / (1.5 * N * (N-1));
+    case  2; B1 = N*(N+1)/6;                        % RWFM (mu=+2)
+    case  1; B1 = N/2;                              % FLFM (mu=+1)
+    case  0; B1 = N*log(N) / (2*(N-1)*log(2));      % WHFM (mu=0)
+    case -1; B1 = 1.0;                              % FLPM (mu=-1) reference
+    case -2; B1 = (N^2 - 1) / (1.5 * N * (N-1));    % WHPM (mu=-2)
     otherwise
-        B1 = (N * (1 - N^mu)) / (2 * (N-1) * (1 - 2^mu));
+        B1 = (N * (1 - N^mu)) / (2 * (N-1) * (1 - 2^mu));   % SP1065 Eq. 75
 end
 end
 
 function Rn = rn_theory(af, b)
-% Theoretical R(n) ratio for White PM (b=0) and Flicker PM (b=-1).
+% Theoretical R(n) = MVAR/AVAR ratio (SP1065 §5.6 / Riley §5.2.6).
+% Used to resolve WHPM (b=0) vs. FLPM (b=-1) after the B1 ratio test.
 switch b
     case 0
-        Rn = 1.0 / af;
+        Rn = 1.0 / af;                              % WHPM asymptotic: R → 1/m
     case -1
+        % FLPM: leading-order MVAR/AVAR ratio
         avar = (1.038 + 3*log(2*pi*0.5*af)) / (4*pi^2);
         mvar = 3*log(256/27) / (8*pi^2);
         Rn   = mvar / avar;

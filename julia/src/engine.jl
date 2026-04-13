@@ -2,6 +2,8 @@
 # All 10 deviation functions are thin wrappers that supply a kernel + DevParams.
 # Reference: deviation-engine skill architecture
 
+const CONFIDENCE_DEFAULT = 0.683   # 1σ (68.3%) — SP1065 default confidence level
+
 """
     engine(x, tau0, m_list, kernel, params) → DeviationResult
 
@@ -12,7 +14,7 @@ Shared deviation computation engine.  Each deviation wrapper passes:
 
 The engine handles: input validation, default m_list generation, noise
 identification, kernel dispatch, EDF computation, optional bias correction,
-and result construction.
+confidence-interval computation, and result construction.
 
 # Kernel contract
 - Input:  full phase vector `x`, averaging factor `m`, sampling interval `tau0`
@@ -20,7 +22,7 @@ and result construction.
 - Return `(NaN, 0)` when there are insufficient samples for this `m`
 
 # Notes
-- CI is not computed here; call `compute_ci(result)` afterwards if needed.
+- Returns CI already filled (chi-squared when EDF finite, Gaussian fallback).
 - Total deviation kernels (totdev, …) handle their own extended-data logic
   internally; the engine loop is identical for all deviation types.
 """
@@ -81,18 +83,20 @@ function engine(
         end
     end
 
-    # Build result with NaN CI (caller may invoke compute_ci)
+    # Build result with NaN CI as a placeholder; filled below via compute_ci.
     alpha_int = [isnan(a) ? 0 : round(Int, a) for a in alpha_float]
     result = DeviationResult(
         tau, dev, edf, fill(NaN, length(ms), 2),
         alpha_int, neff,
-        tau0, N, params.name, 0.683
+        tau0, N, params.name, CONFIDENCE_DEFAULT
     )
 
-    # Bias correction (applied in-place on a new allocation since struct is immutable)
+    # Bias correction first, then CI so intervals bracket the bias-corrected deviation.
     bias_type = _bias_type_for_name(params.name)
-    isnothing(bias_type) && return result
-    return _apply_bias(result, bias_type, T_rec)
+    if !isnothing(bias_type)
+        result = _apply_bias(result, bias_type, T_rec)
+    end
+    return compute_ci(result)
 end
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -114,29 +118,20 @@ end
 function _empty_result(name::String, tau0::Float64, N::Int)
     DeviationResult(
         Float64[], Float64[], Float64[], Matrix{Float64}(undef, 0, 2),
-        Int[], Int[], tau0, N, name, 0.683
+        Int[], Int[], tau0, N, name, CONFIDENCE_DEFAULT
     )
 end
 
 """
     _apply_bias(result, bias_type, T_rec) → DeviationResult
 
-Return a new `DeviationResult` with bias-corrected deviation and EDF.
-Divides `deviation` (and `ci` if not NaN) by the bias factor B(α).
+Return a new `DeviationResult` with bias-corrected deviation. CI is filled
+after this step by the engine, so no rescaling is needed here.
 """
 function _apply_bias(result::DeviationResult, bias_type::String, T_rec::Real)
     B = bias_correction(result.alpha, bias_type, result.tau, T_rec)
-
-    dev_corr = result.deviation ./ B
-
-    ci_corr = if any(!isnan, result.ci)
-        result.ci ./ B
-    else
-        result.ci
-    end
-
     return DeviationResult(
-        result.tau, dev_corr, result.edf, ci_corr,
+        result.tau, result.deviation ./ B, result.edf, result.ci,
         result.alpha, result.neff,
         result.tau0, result.N, result.method, result.confidence
     )

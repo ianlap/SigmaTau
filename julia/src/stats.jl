@@ -132,6 +132,9 @@ function _compute_sx(t::Real, F::Int, alpha::Int)
                   _compute_sw(t + 1/F, alpha))
 end
 
+# Sz = squared d-th central difference of Sx — Greenhall & Riley (2003) Eq. 8.
+# Weights are rows of the squared Pascal triangle:
+#   d=1 → (2, -1, -1); d=2 → (6, -4, -4, 1, 1); d=3 → (20, -15, -15, 6, 6, -1, -1)
 function _compute_sz(t::Real, F::Int, alpha::Int, d::Int)
     sx = (u) -> _compute_sx(u, F, alpha)
     if d == 1
@@ -296,12 +299,15 @@ function compute_ci(result::DeviationResult; confidence::Real = result.confidenc
     )
 end
 
-# Normal quantile approximation (rational; max err < 4.5e-4 for p in [0.01,0.99])
+# Abramowitz & Stegun 26.2.23 rational approximation coefficients
+# Max err < 4.5e-4 for p ∈ [0.01, 0.99]
+const AS_26_2_23_C = (2.515517, 0.802853, 0.010328)
+const AS_26_2_23_D = (1.432788, 0.189269, 0.001308)
+
 function _z_from_confidence(confidence::Real)
     p = 1 - (1 - confidence) / 2
-    # Abramowitz & Stegun 26.2.17
     t = sqrt(-2 * log(1 - p))
-    c = (2.515517, 0.802853, 0.010328)
-    d = (1.432788, 0.189269, 0.001308)
+    c = AS_26_2_23_C
+    d = AS_26_2_23_D
     return t - (c[1] + c[2]*t + c[3]*t^2) / (1 + d[1]*t + d[2]*t^2 + d[3]*t^3)
 end

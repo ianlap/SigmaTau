@@ -86,7 +86,6 @@ for i = 0:(n_iter - 1)
     dev_sum = dev_sum + sum(H.^2) / (6*m);
 end
 
-% Legacy line: dev = sqrt(dev_sum / (6 * n_iter)); engine takes sqrt.
 v    = dev_sum / (6 * n_iter);
 neff = n_iter;
 end

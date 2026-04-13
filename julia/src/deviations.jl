@@ -2,6 +2,9 @@
 # Each function defines a kernel + DevParams and delegates to engine().
 # Architecture: deviation-engine skill / CLAUDE.md §Architecture
 
+const TDEV_MDEV_PREFACTOR  = sqrt(3)       # SP1065 §4: TDEV  = τ · MDEV  / √3
+const LDEV_MHDEV_PREFACTOR = sqrt(10 / 3)  #             LDEV = τ · MHDEV / √(10/3)
+
 # ── ADEV ──────────────────────────────────────────────────────────────────────
 
 """
@@ -19,7 +22,7 @@ The kernel computes the overlapping estimator:
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function adev(
     x         :: AbstractVector{<:Real},
@@ -68,7 +71,7 @@ The kernel uses cumsum prefix sums (O(N) per m):
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function mdev(
     x         :: AbstractVector{<:Real},
@@ -120,7 +123,7 @@ Does NOT call engine directly; derives from MDEV for consistency.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function tdev(
     x         :: AbstractVector{<:Real},
@@ -129,7 +132,7 @@ function tdev(
     data_type :: Symbol = :phase,
 )
     mr    = mdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ sqrt(3)
+    scale = mr.tau ./ TDEV_MDEV_PREFACTOR
     ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
     return DeviationResult(
         mr.tau,
@@ -166,7 +169,7 @@ oscillators with significant aging or for characterising flicker walk FM.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function hdev(
     x         :: AbstractVector{<:Real},
@@ -213,7 +216,7 @@ Modified Hadamard deviation (MHDEV). Third differences with moving average
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function mhdev(
     x         :: AbstractVector{<:Real},
@@ -270,7 +273,7 @@ Does NOT call engine directly; derives from MHDEV for consistency.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function ldev(
     x         :: AbstractVector{<:Real},
@@ -279,7 +282,7 @@ function ldev(
     data_type :: Symbol = :phase,
 )
     mr = mhdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ sqrt(10 / 3)
+    scale = mr.tau ./ LDEV_MHDEV_PREFACTOR
     ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
     return DeviationResult(
         mr.tau,

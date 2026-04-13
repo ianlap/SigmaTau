@@ -31,9 +31,9 @@ if Ne <= 0
     return;
 end
 % Third differences of the phase data
-d4 = x(1:Ne) - 3*x(1+m:Ne+m) + 3*x(1+2*m:Ne+2*m) - x(1+3*m:Ne+3*m);
-% Moving average via cumsum (length-m windows over d4)
-S   = cumsum([0; d4]);
+d3 = x(1:Ne) - 3*x(1+m:Ne+m) + 3*x(1+2*m:Ne+2*m) - x(1+3*m:Ne+3*m);
+% Moving average via cumsum (length-m windows over d3)
+S   = cumsum([0; d3]);
 avg = S(m+1:end) - S(1:end-m);   % length Ne+1-m
 v    = sum(avg.^2) / (numel(avg) * 6 * m^4 * tau0^2);
 neff = Ne;

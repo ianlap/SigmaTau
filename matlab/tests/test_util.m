@@ -31,17 +31,17 @@ catch e
     assert(true);
 end
 
-% detrend_linear — should remove linear component exactly
+% detrend(x, 1) — should remove linear component exactly
 n = 50;
 t = (1:n)';
 x_lin = 3*t + 7 + randn(n,1)*0;   % pure linear
-xd = sigmatau.util.detrend_linear(x_lin);
-assert(max(abs(xd)) < 1e-10, 'detrend_linear: linear data not removed');
+xd = sigmatau.util.detrend(x_lin, 1);
+assert(max(abs(xd)) < 1e-10, 'detrend deg=1: linear data not removed');
 
-% detrend_quadratic — removes quadratic component
+% detrend(x, 2) — removes quadratic component
 x_quad = 0.5*t.^2 - 2*t + 1;
-xd2 = sigmatau.util.detrend_quadratic(x_quad);
-assert(max(abs(xd2)) < 1e-8, 'detrend_quadratic: quadratic not removed');
+xd2 = sigmatau.util.detrend(x_quad, 2);
+assert(max(abs(xd2)) < 1e-8, 'detrend deg=2: quadratic not removed');
 
 % default_mlist
 ms = sigmatau.util.default_mlist(1024, 2);
