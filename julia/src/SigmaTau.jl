@@ -27,6 +27,7 @@ export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
 export totdev, mtotdev, htotdev, mhtotdev
 export KalmanConfig, KalmanResult, kalman_filter, safe_sqrt
+export OptimizeConfig, OptimizeResult, optimize_kf
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
@@ -37,5 +38,6 @@ include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
 include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
+include("optimize.jl")  # OptimizeConfig, OptimizeResult, optimize_kf
 
 end # module
