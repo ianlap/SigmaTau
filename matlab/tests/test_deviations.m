@@ -61,6 +61,20 @@ for k = 1:size(devfns, 1)
     assert(any(isfinite(result.deviation) & result.deviation > 0), ...
            sprintf('%s: no finite positive deviations', name));
 
+    % CI is filled by the engine: where deviation is finite, so is CI, and the
+    % interval brackets the deviation.
+    dev_col = result.deviation(:);
+    finite  = isfinite(dev_col);
+    if any(finite)
+        dv    = dev_col(finite);
+        ci_lo = result.ci(finite, 1);
+        ci_hi = result.ci(finite, 2);
+        assert(all(isfinite(ci_lo) & isfinite(ci_hi)), ...
+               sprintf('%s: ci has NaN where deviation is finite', name));
+        assert(all(ci_lo <= dv), sprintf('%s: ci lower bound above deviation', name));
+        assert(all(ci_hi >= dv), sprintf('%s: ci upper bound below deviation', name));
+    end
+
     fprintf('  OK: %s\n', name);
 end
 

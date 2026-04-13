@@ -22,7 +22,7 @@ The kernel computes the overlapping estimator:
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function adev(
     x         :: AbstractVector{<:Real},
@@ -75,7 +75,7 @@ The kernel uses cumsum prefix sums (O(N) per m):
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function mdev(
     x         :: AbstractVector{<:Real},
@@ -131,7 +131,7 @@ Does NOT call engine directly; derives from MDEV for consistency.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function tdev(
     x         :: AbstractVector{<:Real},
@@ -177,7 +177,7 @@ oscillators with significant aging or for characterising flicker walk FM.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function hdev(
     x         :: AbstractVector{<:Real},
@@ -228,7 +228,7 @@ Modified Hadamard deviation (MHDEV). Third differences with moving average
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function mhdev(
     x         :: AbstractVector{<:Real},
@@ -289,7 +289,7 @@ Does NOT call engine directly; derives from MHDEV for consistency.
 
 # Returns
 `DeviationResult` with fields `tau`, `deviation`, `edf`, `ci`, `alpha`, `neff`.
-CI is NaN until `compute_ci` is called.
+CI is filled by the engine (chi-squared where EDF is finite, Gaussian fallback).
 """
 function ldev(
     x         :: AbstractVector{<:Real},

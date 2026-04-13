@@ -120,10 +120,13 @@ result = struct( ...
     'confidence', CONFIDENCE_DEFAULT ...
 );
 
-% Bias correction (applied in-place; only for total deviations)
+% Bias correction (applied in-place; only for total deviations) — must run
+% before CI so intervals bracket the bias-corrected deviation.
 if params.needs_bias
     result = apply_bias(result, params.bias_type, T_rec);
 end
+
+result.ci = sigmatau.stats.ci(result);
 end
 
 % ── Helpers ───────────────────────────────────────────────────────────────────
@@ -145,14 +148,8 @@ result = struct( ...
 end
 
 function result = apply_bias(result, bias_type, T_rec)
-% Divide deviation (and CI if not NaN) by bias factor B(alpha).
+% Divide deviation by bias factor B(alpha). CI is filled after this step,
+% so no rescaling of CI is needed here.
 B = sigmatau.stats.bias(result.alpha, bias_type, result.tau, T_rec);
-B = B(:)';   % ensure row vector
-
-result.deviation = result.deviation ./ B;
-
-if any(~isnan(result.ci(:)))
-    % ci is Lx2; B is 1xL → replicate
-    result.ci = result.ci ./ repmat(B(:), 1, 2);
-end
+result.deviation = result.deviation ./ B(:)';
 end

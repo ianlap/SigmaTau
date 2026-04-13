@@ -70,6 +70,12 @@ using SigmaTau
         @test result.tau0 == tau0
         @test result.N == N
         @test length(result.edf) == length(result.tau)
+
+        # Engine now fills CI by default: chi-squared where EDF is finite.
+        finite = .!isnan.(result.deviation)
+        @test !any(isnan, result.ci[finite, :])
+        @test all(result.ci[finite, 1] .<= result.deviation[finite])
+        @test all(result.ci[finite, 2] .>= result.deviation[finite])
     end
 
     @testset "Engine respects explicit m_list" begin
@@ -138,6 +144,12 @@ using SigmaTau
         @test length(r.tau) > 0
         @test all(r.tau .> 0)
         @test all(d -> isnan(d) || d > 0, r.deviation)
+
+        # CI is populated by the engine (non-NaN wherever deviation is finite).
+        finite = .!isnan.(r.deviation)
+        @test !any(isnan, r.ci[finite, :])
+        @test all(r.ci[finite, 1] .<= r.deviation[finite])
+        @test all(r.ci[finite, 2] .>= r.deviation[finite])
 
         # explicit m_list
         r2 = adev(x, 1.0; m_list=[1, 2, 4, 8])
