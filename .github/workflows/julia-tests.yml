@@ -1,0 +1,72 @@
+name: Julia Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Julia ${{ matrix.julia-version }} — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ["1.10"]
+        os: [ubuntu-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Julia ${{ matrix.julia-version }}
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.julia-version }}
+
+      - name: Cache Julia depot
+        uses: julia-actions/cache@v2
+
+      - name: Instantiate project
+        run: julia --project=julia -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run tests
+        run: julia --project=julia -e 'using Pkg; Pkg.test()'
+
+  # MATLAB linting requires a licensed MATLAB installation.
+  # Uncomment and configure the steps below when running on a self-hosted runner
+  # that has MATLAB available (e.g. via MathWorks/setup-matlab or a pre-installed copy).
+  #
+  # matlab-lint:
+  #   name: MATLAB syntax check
+  #   runs-on: self-hosted   # replace with a runner that has MATLAB installed
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Check MATLAB syntax
+  #       # Runs matlab -batch; a non-zero exit means a parse/syntax error was found.
+  #       run: |
+  #         matlab -batch "
+  #           addpath(genpath('matlab'));
+  #           files = dir(fullfile('matlab','**','*.m'));
+  #           errs  = {};
+  #           for k = 1:numel(files)
+  #             f = fullfile(files(k).folder, files(k).name);
+  #             try
+  #               checkcode(f, '-id');
+  #             catch ME
+  #               errs{end+1} = sprintf('%s: %s', f, ME.message);
+  #             end
+  #           end
+  #           if ~isempty(errs)
+  #             fprintf(2, 'Syntax errors found:\n');
+  #             cellfun(@(e) fprintf(2, '  %s\n', e), errs);
+  #             exit(1);
+  #           end
+  #           disp('All MATLAB files passed syntax check.');
+  #         "

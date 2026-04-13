@@ -205,5 +205,6 @@ using SigmaTau
     include("test_allan_family.jl")
     include("test_hadamard_family.jl")
     include("test_total_family.jl")
+    include("test_filter.jl")
 
 end  # @testset "SigmaTau"
