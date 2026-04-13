@@ -271,25 +271,37 @@ end
 """
     compute_ci(result; confidence=result.confidence) → DeviationResult
 
-Compute EDF and confidence intervals.  Returns a new `DeviationResult` with
-`edf` populated and `ci` set to Gaussian fallback intervals.
-
-**Note**: Full chi-squared CI requires the `Distributions` package (not yet a
-dependency).  For now `ci` is a ±Kn·σ/√N Gaussian estimate.  Add
-`Distributions` and replace this stub when exact CI is needed.
+Compute EDF and confidence intervals. Chi-squared CI where EDF is finite
+and positive; Gaussian ±Kn·σ·z/√N fallback otherwise (SP1065 Eq. A-8).
 """
 function compute_ci(result::DeviationResult; confidence::Real = result.confidence)
     edf = edf_for_result(result)
     L   = length(result.deviation)
     ci  = Matrix{Float64}(undef, L, 2)
 
-    # Gaussian fallback: ±Kn * dev / sqrt(N)   (SP1065 Eq. A-8 limiting form)
+    a_half = (1 - confidence) / 2
+    z      = norminvcdf(1 - a_half)
+
     for k in 1:L
-        Kn   = _kn_from_alpha(result.alpha[k])
-        z    = _z_from_confidence(confidence)
-        half = Kn * result.deviation[k] * z / sqrt(Float64(result.N))
-        ci[k, 1] = result.deviation[k] - half
-        ci[k, 2] = result.deviation[k] + half
+        d = result.deviation[k]
+        if isnan(d)
+            ci[k, 1] = NaN
+            ci[k, 2] = NaN
+            continue
+        end
+        ef = edf[k]
+        if isfinite(ef) && ef > 0
+            # Chi-squared CI: dev·√(edf/χ²_{1-a/2}) to dev·√(edf/χ²_{a/2})
+            chi_lo = chisqinvcdf(ef, a_half)
+            chi_hi = chisqinvcdf(ef, 1 - a_half)
+            ci[k, 1] = d * sqrt(ef / chi_hi)
+            ci[k, 2] = d * sqrt(ef / chi_lo)
+        else
+            Kn   = _kn_from_alpha(result.alpha[k])
+            half = Kn * d * z / sqrt(Float64(result.N))
+            ci[k, 1] = d - half
+            ci[k, 2] = d + half
+        end
     end
 
     return DeviationResult(
@@ -297,17 +309,4 @@ function compute_ci(result::DeviationResult; confidence::Real = result.confidenc
         result.alpha, result.neff,
         result.tau0, result.N, result.method, Float64(confidence)
     )
-end
-
-# Abramowitz & Stegun 26.2.23 rational approximation coefficients
-# Max err < 4.5e-4 for p ∈ [0.01, 0.99]
-const AS_26_2_23_C = (2.515517, 0.802853, 0.010328)
-const AS_26_2_23_D = (1.432788, 0.189269, 0.001308)
-
-function _z_from_confidence(confidence::Real)
-    p = 1 - (1 - confidence) / 2
-    t = sqrt(-2 * log(1 - p))
-    c = AS_26_2_23_C
-    d = AS_26_2_23_D
-    return t - (c[1] + c[2]*t + c[3]*t^2) / (1 + d[1]*t + d[2]*t^2 + d[3]*t^3)
 end

@@ -15,6 +15,7 @@ module SigmaTau
 
 using Statistics
 using LinearAlgebra
+using StatsFuns: norminvcdf, chisqinvcdf
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
