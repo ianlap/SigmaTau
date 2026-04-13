@@ -66,12 +66,15 @@ end
 % ── Helpers ───────────────────────────────────────────────────────────────────
 
 function z = z_from_confidence(confidence)
-% Normal quantile approximation (Abramowitz & Stegun 26.2.17).
+% Normal quantile approximation — Abramowitz & Stegun 26.2.23.
 % Matches Julia _z_from_confidence in stats.jl. Max error < 4.5e-4.
+AS_26_2_23_C = [2.515517, 0.802853, 0.010328];
+AS_26_2_23_D = [1.432788, 0.189269, 0.001308];
+
 p = 1 - (1 - confidence) / 2;
 t = sqrt(-2 * log(1 - p));
-c = [2.515517, 0.802853, 0.010328];
-d = [1.432788, 0.189269, 0.001308];
+c = AS_26_2_23_C;
+d = AS_26_2_23_D;
 z = t - (c(1) + c(2)*t + c(3)*t^2) / (1 + d(1)*t + d(2)*t^2 + d(3)*t^3);
 end
 

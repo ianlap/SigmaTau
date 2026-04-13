@@ -18,7 +18,7 @@ function result = engine(x, tau0, m_list, kernel, params, varargin)
 %                 .is_total    – bool: use totaldev_edf
 %                 .total_type  – string for totaldev_edf
 %                 .needs_bias  – bool: apply bias correction
-%                 .bias_type   – string for bias_correction
+%                 .bias_type   – string for sigmatau.stats.bias
 %
 %   Name-Value:
 %     'data_type' – 'phase' (default) or 'freq'
@@ -26,6 +26,8 @@ function result = engine(x, tau0, m_list, kernel, params, varargin)
 %   Output:
 %     result – struct with fields: tau, deviation, edf, ci, alpha, neff,
 %              tau0, N, method, confidence
+
+CONFIDENCE_DEFAULT = 0.683;   % 1σ (68.3%) — SP1065 default confidence level
 
 % Parse name-value options
 p = inputParser;
@@ -115,7 +117,7 @@ result = struct( ...
     'tau0',       tau0,       ...
     'N',          N,          ...
     'method',     params.name,...
-    'confidence', 0.683       ...
+    'confidence', CONFIDENCE_DEFAULT ...
 );
 
 % Bias correction (applied in-place; only for total deviations)
@@ -127,6 +129,7 @@ end
 % ── Helpers ───────────────────────────────────────────────────────────────────
 
 function result = empty_result(name, tau0, N)
+CONFIDENCE_DEFAULT = 0.683;
 result = struct( ...
     'tau',        zeros(1,0), ...
     'deviation',  zeros(1,0), ...
@@ -137,13 +140,13 @@ result = struct( ...
     'tau0',       tau0,       ...
     'N',          N,          ...
     'method',     name,       ...
-    'confidence', 0.683       ...
+    'confidence', CONFIDENCE_DEFAULT ...
 );
 end
 
 function result = apply_bias(result, bias_type, T_rec)
 % Divide deviation (and CI if not NaN) by bias factor B(alpha).
-B = sigmatau.stats.bias_correction(result.alpha, bias_type, result.tau, T_rec);
+B = sigmatau.stats.bias(result.alpha, bias_type, result.tau, T_rec);
 B = B(:)';   % ensure row vector
 
 result.deviation = result.deviation ./ B;

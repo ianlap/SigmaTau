@@ -164,20 +164,25 @@ end
 
 # ── B1 / R(n) theory tables ───────────────────────────────────────────────────
 
+# Theoretical B1 ratio (classical-var / Allan-var) vs. noise slope μ.
+# Closed forms for integer μ; general formula (SP1065 Eq. 75 / Howe–Beard 1998) otherwise.
 function _b1_theory(N::Int, mu::Int)
-    if mu == 2;  return N * (N + 1) / 6
-    elseif mu == 1;  return N / 2
-    elseif mu == 0;  return N * log(N) / (2 * (N - 1) * log(2))
-    elseif mu == -1; return 1.0
-    elseif mu == -2; return (N^2 - 1) / (1.5 * N * (N - 1))
-    else;            return (N * (1 - N^mu)) / (2 * (N - 1) * (1 - 2^mu))
+    if mu == 2;  return N * (N + 1) / 6               # RWFM (μ=+2)
+    elseif mu == 1;  return N / 2                     # FLFM (μ=+1)
+    elseif mu == 0;  return N * log(N) / (2 * (N - 1) * log(2))  # WHFM (μ=0)
+    elseif mu == -1; return 1.0                       # FLPM (μ=-1) reference
+    elseif mu == -2; return (N^2 - 1) / (1.5 * N * (N - 1))      # WHPM (μ=-2)
+    else;            return (N * (1 - N^mu)) / (2 * (N - 1) * (1 - 2^mu))  # SP1065 Eq. 75
     end
 end
 
+# Theoretical R(n) = MVAR/AVAR ratio vs. noise slope b (SP1065 §5.6 / Riley §5.2.6).
+# Used to resolve WHPM (b=0) vs. FLPM (b=-1) ambiguity after the B1 ratio test.
 function _rn_theory(af::Int, b::Int)
     if b == 0
-        return 1.0 / af
+        return 1.0 / af                                # WHPM asymptotic: R(n) → 1/m
     elseif b == -1
+        # FLPM: closed-form ratio of MVAR/AVAR using leading-order expansions
         avar = (1.038 + 3 * log(2π * 0.5 * af)) / (4π^2)
         mvar = 3 * log(256 / 27) / (8π^2)
         return mvar / avar

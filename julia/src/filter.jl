@@ -194,10 +194,8 @@ function kalman_filter(data::Vector{Float64}, cfg::KalmanConfig)
     phase = copy(data)  # working copy — updated each step
 
     for k in 1:N
-        absτ = abs(τ)  # slot for future time-varying tau
-
         build_phi!(Φ, ns, τ)
-        build_Q!(Q, ns, cfg.q_wfm, cfg.q_rwfm, cfg.q_irwfm, cfg.q_diurnal, absτ)
+        build_Q!(Q, ns, cfg.q_wfm, cfg.q_rwfm, cfg.q_irwfm, cfg.q_diurnal, τ)
 
         # Diurnal measurement update — legacy filter.jl lines 75-79
         if ns == 5

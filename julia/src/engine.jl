@@ -2,6 +2,8 @@
 # All 10 deviation functions are thin wrappers that supply a kernel + DevParams.
 # Reference: deviation-engine skill architecture
 
+const CONFIDENCE_DEFAULT = 0.683   # 1σ (68.3%) — SP1065 default confidence level
+
 """
     engine(x, tau0, m_list, kernel, params) → DeviationResult
 
@@ -85,7 +87,7 @@ function engine(
     result = DeviationResult(
         tau, dev, edf, fill(NaN, length(ms), 2),
         alpha_int, neff,
-        tau0, N, params.name, 0.683
+        tau0, N, params.name, CONFIDENCE_DEFAULT
     )
 
     # Bias correction (applied in-place on a new allocation since struct is immutable)
@@ -98,7 +100,7 @@ end
 function _empty_result(name::String, tau0::Float64, N::Int)
     DeviationResult(
         Float64[], Float64[], Float64[], Matrix{Float64}(undef, 0, 2),
-        Int[], Int[], tau0, N, name, 0.683
+        Int[], Int[], tau0, N, name, CONFIDENCE_DEFAULT
     )
 end
 

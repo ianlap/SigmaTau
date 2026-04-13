@@ -2,6 +2,9 @@
 # Each function defines a kernel + DevParams and delegates to engine().
 # Architecture: deviation-engine skill / CLAUDE.md §Architecture
 
+const TDEV_MDEV_PREFACTOR  = sqrt(3)       # SP1065 §4: TDEV  = τ · MDEV  / √3
+const LDEV_MHDEV_PREFACTOR = sqrt(10 / 3)  #             LDEV = τ · MHDEV / √(10/3)
+
 # ── ADEV ──────────────────────────────────────────────────────────────────────
 
 """
@@ -137,7 +140,7 @@ function tdev(
     data_type :: Symbol = :phase,
 )
     mr    = mdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ sqrt(3)
+    scale = mr.tau ./ TDEV_MDEV_PREFACTOR
     ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
     return DeviationResult(
         mr.tau,
@@ -295,7 +298,7 @@ function ldev(
     data_type :: Symbol = :phase,
 )
     mr = mhdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ sqrt(10 / 3)
+    scale = mr.tau ./ LDEV_MHDEV_PREFACTOR
     ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
     return DeviationResult(
         mr.tau,

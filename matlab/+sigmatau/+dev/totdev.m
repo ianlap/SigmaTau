@@ -34,7 +34,7 @@ function [v, neff] = totdev_kernel(x, m, tau0)
 % Linear detrend + symmetric reflection, then overlapping second differences.
 % SP1065 §5.11: denominator uses (N-2).
 N  = numel(x);
-xd = sigmatau.util.detrend_linear(x);
+xd = sigmatau.util.detrend(x, 1);
 % Symmetric reflection about each endpoint
 x_left  = 2*xd(1)   - xd(2:N-1);           % length N-2
 x_right = 2*xd(end) - xd(N-1:-1:2);         % length N-2

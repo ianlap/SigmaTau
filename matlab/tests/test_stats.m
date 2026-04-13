@@ -24,27 +24,13 @@ assert(isfinite(edf_htot) && edf_htot > 0, 'totaldev_edf: htot RWFM should be po
 edf_unk = sigmatau.stats.totaldev_edf('totvar', 99, 1000, 10);
 assert(isnan(edf_unk), 'totaldev_edf: unknown alpha should return NaN');
 
-% bias_correction
-B_totvar = sigmatau.stats.bias_correction([-1, -2, 0], 'totvar', [10, 10, 10], 1000);
-assert(numel(B_totvar) == 3 && all(isfinite(B_totvar)), 'bias_correction: totvar failed');
-assert(B_totvar(3) == 1, 'bias_correction: alpha=0 totvar should be 1');
+% bias — TOTVAR, MTOT
+B_totvar = sigmatau.stats.bias([-1, -2, 0], 'totvar', [10, 10, 10], 1000);
+assert(numel(B_totvar) == 3 && all(isfinite(B_totvar)), 'bias: totvar failed');
+assert(B_totvar(3) == 1, 'bias: alpha=0 totvar should be 1');
 
-B_mtot = sigmatau.stats.bias_correction([0, -1, -2], 'mtot', [1,1,1], 100);
-assert(all(B_mtot > 1), 'bias_correction: mtot should be >1');
-
-% compute_ci — smoke test via a simple result struct
-result = struct( ...
-    'deviation',  [1e-12, 5e-13], ...
-    'alpha',      [0, 0],         ...
-    'N',          1000,           ...
-    'confidence', 0.683           ...
-);
-ci = sigmatau.stats.compute_ci(result);
-assert(isequal(size(ci), [2, 2]), 'compute_ci: wrong CI size');
-assert(all(ci(:,1) < [1e-12; 5e-13]), 'compute_ci: lower CI should be < dev');
-assert(all(ci(:,2) > [1e-12; 5e-13]), 'compute_ci: upper CI should be > dev');
-
-% ── New canonical functions ────────────────────────────────────────────────────
+B_mtot = sigmatau.stats.bias([0, -1, -2], 'mtot', [1,1,1], 100);
+assert(all(B_mtot > 1), 'bias: mtot should be >1');
 
 % edf() — result-struct dispatcher
 result_edf = struct( ...
@@ -73,12 +59,7 @@ edf_unk = sigmatau.stats.edf(result_unk);
 warning(w);
 assert(isnan(edf_unk), 'edf: unknown method should return NaN');
 
-% bias() canonical name — should match bias_correction
-B_bias = sigmatau.stats.bias([-1, -2, 0], 'totvar', [10, 10, 10], 1000);
-B_bc   = sigmatau.stats.bias_correction([-1, -2, 0], 'totvar', [10, 10, 10], 1000);
-assert(isequal(B_bias, B_bc), 'bias: must equal bias_correction');
-
-% ci() canonical name — smoke test with edf field
+% ci() — smoke test with edf field
 result_ci = struct( ...
     'deviation',  [1e-12, 5e-13], ...
     'alpha',      [0, 0],         ...
