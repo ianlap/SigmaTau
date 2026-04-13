@@ -13,6 +13,14 @@
 
 using LinearAlgebra: I
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+const _MAX_LS_SAMPLES    = 100   # max samples used for LS state initialization
+const _P0_SCALE          = 1e6   # diffuse initial covariance (high uncertainty)
+const _INVALID_NLL       = 1e15  # penalty returned when S ≤ 0 (numerical guard)
+const _NM_PERTURB_EPS    = 1e-10 # threshold below which absolute step is used
+const _NM_PERTURB_FRAC   = 0.05  # relative simplex perturbation size
+
 # ── Structs ───────────────────────────────────────────────────────────────────
 
 """
@@ -30,7 +38,7 @@ Base.@kwdef struct OptimizeConfig
     tau::Float64     = 1.0     # Sampling interval [s]
     verbose::Bool    = true    # Print progress
     max_iter::Int    = 500     # Max Nelder-Mead iterations
-    tol::Float64     = 1e-8   # Convergence tolerance (std of simplex f-values)
+    tol::Float64     = 1e-6   # Convergence tolerance (std of simplex f-values)
 end
 
 """
@@ -57,24 +65,26 @@ const _NM_RHO   = 0.5
 const _NM_SIGMA = 0.5
 
 """
-    _nelder_mead(f, x0; max_iter, tol) -> (x_opt, f_opt, n_evals)
+    _nelder_mead(f, x0; max_iter, tol) -> (x_opt, f_opt, n_evals, converged)
 
 Nelder-Mead simplex minimization of `f` starting from `x0`.
-Returns the best vertex, its function value, and total evaluations.
+Returns the best vertex, its function value, total evaluations, and whether
+the convergence criterion (std of simplex f-values < tol) was satisfied.
 """
 function _nelder_mead(f, x0::Vector{Float64}; max_iter::Int = 500,
-                      tol::Float64 = 1e-8)
+                      tol::Float64 = 1e-6)
     n = length(x0)
 
     # Build initial simplex: x0 plus n perturbations
     verts = [copy(x0) for _ in 1:n+1]
     for i in 1:n
-        δ = abs(x0[i]) > 1e-10 ? 0.05 * x0[i] : 0.05
+        δ = abs(x0[i]) > _NM_PERTURB_EPS ? _NM_PERTURB_FRAC * x0[i] : _NM_PERTURB_FRAC
         verts[i+1][i] += δ
     end
 
     fvals   = [f(v) for v in verts]
     n_evals = n + 1
+    converged = false
 
     for _ in 1:max_iter
         # Sort ascending
@@ -83,7 +93,10 @@ function _nelder_mead(f, x0::Vector{Float64}; max_iter::Int = 500,
         fvals  = fvals[ord]
 
         # Convergence: std of function values
-        std(fvals) < tol && break
+        if std(fvals) < tol
+            converged = true
+            break
+        end
 
         # Centroid of all vertices except worst
         xbar = mean(verts[1:n])
@@ -130,7 +143,7 @@ function _nelder_mead(f, x0::Vector{Float64}; max_iter::Int = 500,
 
     # Return best
     ord = sortperm(fvals)
-    return verts[ord[1]], fvals[ord[1]], n_evals
+    return verts[ord[1]], fvals[ord[1]], n_evals, converged
 end
 
 function _shrink!(verts, fvals, f, n::Int)
@@ -173,12 +186,12 @@ function _kf_nll(theta::Vector{Float64}, data::Vector{Float64},
     Q = _build_Q(ns, q_wfm, q_rwfm, q_irwfm, τ)
 
     # LS initialization on first min(100, N-1) samples
-    n_fit = max(ns, min(100, N - 1))
+    n_fit = max(ns, min(_MAX_LS_SAMPLES, N - 1))
     t_fit = Float64.(0:n_fit-1) .* τ
     A_fit = _build_A(t_fit, ns)
     x     = A_fit \ data[1:n_fit]
 
-    P   = 1e6 .* Matrix{Float64}(I, ns, ns)
+    P   = _P0_SCALE .* Matrix{Float64}(I, ns, ns)
     nll = 0.0
 
     for k in 1:N
@@ -190,7 +203,7 @@ function _kf_nll(theta::Vector{Float64}, data::Vector{Float64},
         ν = data[k] - (H * x)[1]           # innovation (scalar)
         S = (H * P * H')[1, 1] + R          # innovation variance (scalar)
 
-        S <= 0.0 && return 1e15             # guard numerical drift
+        S <= 0.0 && return _INVALID_NLL   # guard numerical drift
 
         # Gaussian NLL contribution
         nll += 0.5 * (log(S) + ν^2 / S)
@@ -263,15 +276,12 @@ function optimize_kf(data::Vector{Float64}, cfg::OptimizeConfig)::OptimizeResult
 
     obj = th -> _kf_nll(th, data, cfg)
 
-    theta_opt, nll_opt, n_evals =
+    theta_opt, nll_opt, n_evals, converged =
         _nelder_mead(obj, theta0; max_iter = cfg.max_iter, tol = cfg.tol)
 
     q_wfm_opt   = 10.0^theta_opt[1]
     q_rwfm_opt  = 10.0^theta_opt[2]
     q_irwfm_opt = length(theta_opt) >= 3 ? 10.0^theta_opt[3] : 0.0
-
-    converged = std([obj(theta_opt .+ 1e-6*randn(length(theta_opt)))
-                     for _ in 1:5]) < cfg.tol * 100
 
     if cfg.verbose
         println("  NLL = $(round(nll_opt, sigdigits=6))  ($n_evals evals)")

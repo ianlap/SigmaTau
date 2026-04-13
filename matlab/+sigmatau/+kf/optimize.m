@@ -119,6 +119,10 @@ end
 function nll = kf_nll(theta, data, cfg)
 % Evaluate NLL of phase data under KF with log10-space parameters theta.
 % No steering — innovations reflect pure filter fit to data.
+MAX_LS_SAMPLES = 100;    % max samples for LS state initialization
+P0_SCALE       = 1e6;    % diffuse initial covariance (high uncertainty)
+INVALID_NLL    = 1e15;   % penalty returned when S ≤ 0 (numerical guard)
+
 N   = numel(data);
 ns  = cfg.nstates;
 tau = cfg.tau;
@@ -143,13 +147,13 @@ H(1) = 1;  % observe phase only
 % Process noise Q — SP1065 continuous-time model, matches filter.jl build_Q!
 Q = build_Q_mat(ns, q_wfm, q_rwfm, q_irwfm, tau);
 
-% LS initialization on first min(100, N-1) samples
-n_fit = max(ns, min(100, N - 1));
+% LS initialization on first min(MAX_LS_SAMPLES, N-1) samples
+n_fit = max(ns, min(MAX_LS_SAMPLES, N - 1));
 t_fit = (0 : n_fit - 1)' * tau;
 A_fit = build_A_mat(t_fit, ns);
 x     = A_fit \ data(1:n_fit);
 
-P   = 1e6 * eye(ns);
+P   = P0_SCALE * eye(ns);
 nll = 0;
 
 for k = 1:N
@@ -162,7 +166,7 @@ for k = 1:N
     S  = H * P * H' + R;            % innovation variance (scalar)
 
     if S <= 0
-        nll = 1e15;
+        nll = INVALID_NLL;
         return;
     end
 
