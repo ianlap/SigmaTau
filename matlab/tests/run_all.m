@@ -7,6 +7,7 @@ addpath(genpath(fileparts(mfilename('fullpath')) + "/../"));
 tests = {
     'test_util',
     'test_stats',
+    'test_noise',
     'test_deviations',
     'test_noise_slopes',
     'test_freq_input',
