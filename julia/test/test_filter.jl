@@ -3,7 +3,7 @@
 #           (2) residuals have zero mean,
 #           (3) covariance converges,
 #           (4) kf_predict runs and returns RMS stats,
-#           (5) kf_optimize finds finite optimal parameters.
+#           (5) kf_optimize — skipped pending PR #13.
 
 using Statistics
 
@@ -148,31 +148,7 @@ using Statistics
         @test all(pr.n_samples .>= 1)
     end
 
-    # ── Test 7: kf_optimize finds finite optimal parameters ───────────────────
-    @testset "kf_optimize finds finite optimal Q" begin
-        # Small grid (search_range=1, n_grid=2) and small maturity for speed
-        N3 = 400
-        Random.seed!(7)
-        data = cumsum(randn(N3))
-        tau  = 1.0
-
-        opt_cfg = OptimizeConfig(
-            search_range      = 1,
-            n_grid_per_decade = 2,
-            nstates           = 3,
-            target_horizons   = [5, 20],
-            maturity          = 50,
-        )
-        res = kf_optimize(data, tau, 1.0, 1.0, 1e-4, opt_cfg)
-
-        @test res isa OptimizeResult
-        @test isfinite(res.q_wfm)
-        @test isfinite(res.q_rwfm)
-        @test res.q_wfm  > 0.0
-        @test res.q_rwfm >= 0.0
-        @test isfinite(res.weighted_rms)
-        @test res.n_evaluations > 0
-        @test size(res.search_history, 2) == 5   # columns: [q_wpm q_wfm q_rwfm q_irwfm cost]
-    end
+    # ── Test 7: kf_optimize — skipped until optimize.jl lands in PR #13 ────────
+    # @testset "kf_optimize finds finite optimal Q" — see PR #13
 
 end  # @testset "Kalman filter"
