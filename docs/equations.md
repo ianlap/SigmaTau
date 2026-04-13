@@ -197,7 +197,7 @@ differences.
 `matlab/+sigmatau/+dev/htotdev.m:htotdev_kernel`): MATLAB and Julia are structurally
 identical, including the m=1 branch.
 
-**Bias correction**: Applied by engine (`bias_type = "htot"`). Direction (multiply vs
+**Bias correction**: Applied by engine (inferred from method name `htotdev`). Direction (multiply vs
 divide) is flagged in CLAUDE.md as needing verification against SP1065 table and
 Julia output.
 
@@ -224,7 +224,7 @@ block_var = Σ avg² / (n_avg · 6m²)    where avg is m-point cumsum window of 
 moving average via cumsum.
 
 **EDF**: No published analytical model. Engine uses approximate coefficients from
-FCS 2001. Parameter `total_type = "mhtot"`.
+FCS 2001 (inferred total EDF mode for `mhtotdev`).
 
 **Status**: ✓ MATLAB and Julia kernels are structurally identical. EDF is
 approximate (FCS 2001 only).
