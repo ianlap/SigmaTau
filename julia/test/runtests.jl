@@ -5,17 +5,14 @@ using SigmaTau
 @testset "SigmaTau" begin
 
     @testset "DevParams construction" begin
-        p = DevParams("adev", 2, 2, m -> m, 0, 2, false, "", false, "")
+        p = DevParams("adev", 2, 2, m -> m, 0, 2)
         @test p.name == "adev"
         @test p.min_factor == 2
         @test p.d == 2
         @test p.F_fn(4) == 4          # unmodified: F = m
         @test p.dmin == 0
         @test p.dmax == 2
-        @test p.is_total == false
-        @test p.needs_bias == false
-
-        p_mod = DevParams("mdev", 3, 2, m -> 1, 0, 2, false, "", false, "")
+        p_mod = DevParams("mdev", 3, 2, m -> 1, 0, 2)
         @test p_mod.F_fn(99) == 1     # modified: F = 1 always
     end
 
@@ -59,7 +56,7 @@ using SigmaTau
             return (v, L)
         end
 
-        params = DevParams("adev", 2, 2, m -> m, 0, 2, false, "", false, "")
+        params = DevParams("adev", 2, 2, m -> m, 0, 2)
         result = engine(x, tau0, nothing, adev_kernel, params)
 
         @test result isa DeviationResult
@@ -80,7 +77,7 @@ using SigmaTau
             d2 = @view(x[1+2m:end]) .- 2 .* @view(x[1+m:end-m]) .+ @view(x[1:L])
             (sum(abs2, d2) / (L * 2 * m^2 * tau0^2), L)
         end
-        params = DevParams("adev", 2, 2, m -> m, 0, 2, false, "", false, "")
+        params = DevParams("adev", 2, 2, m -> m, 0, 2)
         ms     = [1, 2, 4, 8]
         result = engine(x, 1.0, ms, kernel, params)
 

@@ -8,7 +8,7 @@
 Shared deviation computation engine.  Each deviation wrapper passes:
 - `kernel(x, m, tau0) → (variance::Float64, neff::Int)` — the core computation.
   Kernels return **variance**, not deviation; the engine takes the sqrt.
-- `params::DevParams` — configuration (name, EDF type, bias correction, …)
+- `params::DevParams` — configuration (name, m-list and EDF basics)
 
 The engine handles: input validation, default m_list generation, noise
 identification, kernel dispatch, EDF computation, optional bias correction,
@@ -72,8 +72,9 @@ function engine(
 
         # EDF computation
         alpha_k = isnan(alpha_float[k]) ? 0 : round(Int, alpha_float[k])
-        if params.is_total
-            edf[k] = totaldev_edf(params.total_type, alpha_k, T_rec, tau[k])
+        total_type = _total_type_for_name(params.name)
+        if !isnothing(total_type)
+            edf[k] = totaldev_edf(total_type, alpha_k, T_rec, tau[k])
         else
             F = params.F_fn(m)
             edf[k] = calculate_edf(alpha_k, params.d, m, F, 1, N)
@@ -89,11 +90,26 @@ function engine(
     )
 
     # Bias correction (applied in-place on a new allocation since struct is immutable)
-    params.needs_bias || return result
-    return _apply_bias(result, params.bias_type, T_rec)
+    bias_type = _bias_type_for_name(params.name)
+    isnothing(bias_type) && return result
+    return _apply_bias(result, bias_type, T_rec)
 end
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+function _total_type_for_name(name::String)
+    name == "totdev"  && return "totvar"
+    name == "mtotdev" && return "mtot"
+    name == "htotdev" && return "htot"
+    name == "mhtotdev" && return "mhtot"
+    return nothing
+end
+
+function _bias_type_for_name(name::String)
+    name == "totdev" && return "totvar"
+    name == "htotdev" && return "htot"
+    return nothing
+end
 
 function _empty_result(name::String, tau0::Float64, N::Int)
     DeviationResult(

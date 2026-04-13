@@ -34,10 +34,6 @@ function adev(
         m -> m,         # F_fn: F = m for unmodified
         0,              # dmin for noise_id
         2,              # dmax for noise_id
-        false,          # is_total
-        "",             # total_type (unused)
-        false,          # needs_bias
-        "",             # bias_type (unused)
     )
     return engine(x, tau0, m_list, _adev_kernel, params; data_type)
 end
@@ -87,10 +83,6 @@ function mdev(
         m -> 1,         # F_fn: F = 1 for modified
         0,              # dmin for noise_id
         2,              # dmax for noise_id
-        false,          # is_total
-        "",             # total_type (unused)
-        false,          # needs_bias
-        "",             # bias_type (unused)
     )
     return engine(x, tau0, m_list, _mdev_kernel, params; data_type)
 end
@@ -189,10 +181,6 @@ function hdev(
         m -> m,         # F_fn: F = m for unmodified
         0,              # dmin for noise_id
         2,              # dmax for noise_id
-        false,          # is_total
-        "",             # total_type (unused)
-        false,          # needs_bias
-        "",             # bias_type (unused)
     )
     return engine(x, tau0, m_list, _hdev_kernel, params; data_type)
 end
@@ -240,10 +228,6 @@ function mhdev(
         m -> 1,         # F_fn: F = 1 for modified
         0,              # dmin for noise_id
         2,              # dmax for noise_id
-        false,          # is_total
-        "",             # total_type (unused)
-        false,          # needs_bias
-        "",             # bias_type (unused)
     )
     return engine(x, tau0, m_list, _mhdev_kernel, params; data_type)
 end
@@ -344,10 +328,6 @@ function totdev(
         m -> m,     # F_fn: unmodified
         0,          # dmin for noise_id
         2,          # dmax for noise_id
-        true,       # is_total
-        "totvar",   # total_type
-        true,       # needs_bias
-        "totvar",   # bias_type
     )
     return engine(x, tau0, m_list, _totdev_kernel, params; data_type)
 end
@@ -407,10 +387,6 @@ function mtotdev(
         m -> 1,     # F_fn: modified (F=1)
         0,          # dmin for noise_id
         2,          # dmax for noise_id
-        true,       # is_total
-        "mtot",     # total_type
-        false,      # needs_bias
-        "",         # bias_type
     )
     return engine(x, tau0, m_list, _mtotdev_kernel, params; data_type)
 end
@@ -509,10 +485,6 @@ function htotdev(
         m -> m,     # F_fn: unmodified
         0,          # dmin for noise_id
         2,          # dmax for noise_id
-        true,       # is_total
-        "htot",     # total_type
-        true,       # needs_bias
-        "htot",     # bias_type
     )
     return engine(x, tau0, m_list, _htotdev_kernel, params; data_type)
 end
@@ -624,10 +596,6 @@ function mhtotdev(
         m -> 1,     # F_fn: modified (F=1)
         0,          # dmin for noise_id
         2,          # dmax for noise_id
-        true,       # is_total
-        "mhtot",    # total_type
-        false,      # needs_bias
-        "",         # bias_type
     )
     return engine(x, tau0, m_list, _mhtotdev_kernel, params; data_type)
 end
