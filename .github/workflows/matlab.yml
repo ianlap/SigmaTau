@@ -13,12 +13,16 @@ jobs:
   test:
     name: Run MATLAB Tests
     runs-on: ubuntu-latest
+    env:
+      MLM_LICENSE_TOKEN: ${{ secrets.MATLAB_BATCH_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v3
+        with:
+          products: Statistics_and_Machine_Learning_Toolbox
 
       - name: Run tests
         uses: matlab-actions/run-tests@v3
@@ -29,12 +33,16 @@ jobs:
   lint:
     name: MATLAB Syntax Check
     runs-on: ubuntu-latest
+    env:
+      MLM_LICENSE_TOKEN: ${{ secrets.MATLAB_BATCH_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v3
+        with:
+          products: Statistics_and_Machine_Learning_Toolbox
 
       - name: Check syntax with checkcode
         uses: matlab-actions/run-command@v3
