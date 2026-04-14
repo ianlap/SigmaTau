@@ -4,10 +4,10 @@
 # with index labels and fit its components.
 #
 # Usage (from repo root):
-#   julia --threads=auto examples/kf_pipeline/mhdev_preview.jl <dataset>
+#   julia --threads=auto scripts/julia/mhdev_preview.jl <dataset>
 # where <dataset> is the basename (no .txt) of a file in reference/, e.g.
-#   julia --threads=auto examples/kf_pipeline/mhdev_preview.jl 6krb25apr
-#   julia --threads=auto examples/kf_pipeline/mhdev_preview.jl 6k27febunsteered
+#   julia --threads=auto scripts/julia/mhdev_preview.jl 6krb25apr
+#   julia --threads=auto scripts/julia/mhdev_preview.jl 6k27febunsteered
 
 using Dates
 using DelimitedFiles

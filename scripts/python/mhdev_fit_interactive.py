@@ -22,7 +22,7 @@ Noise-type menu:
     0 done
 
 Run from repo root:
-    python3 examples/kf_pipeline/mhdev_fit_interactive.py <dataset>
+    python3 scripts/python/mhdev_fit_interactive.py <dataset>
 """
 from __future__ import annotations
 

@@ -15,9 +15,9 @@
 #      sample the NLL surface around the optimum.
 #
 # Run from repo root:
-#   julia --threads=auto --project=julia examples/kf_pipeline/kf_pipeline.jl <dataset>
+#   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl <dataset>
 # e.g.
-#   julia --threads=auto --project=julia examples/kf_pipeline/kf_pipeline.jl 6krb25apr
+#   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl 6krb25apr
 
 using Dates
 using DelimitedFiles

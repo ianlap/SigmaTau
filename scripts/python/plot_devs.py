@@ -2,7 +2,7 @@
 """Plot each SigmaTau deviation written by compute_devs.jl on its own figure.
 
 Usage (from repo root):
-  python3 examples/kf_pipeline/plot_devs.py <dataset>
+  python3 scripts/python/plot_devs.py <dataset>
 
 Reads  results/<dataset>/devs/<dev>.csv and writes <dev>.png alongside.
 """

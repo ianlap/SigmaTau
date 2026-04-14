@@ -2,7 +2,7 @@
 
 Drop a Stable32 phase log (e.g. a real rubidium oscillator capture named
 `6krb25apr.txt`, two columns: MJD and phase-in-seconds) into this directory
-and use `examples/kf_pipeline/` scripts to compute the 10 NIST deviations on
+and use `scripts/julia/` scripts to compute the 10 NIST deviations on
 it for side-by-side comparison against Stable32's own output.
 
 The raw phase log is **not checked in** (it's proprietary or large). Nothing
@@ -24,10 +24,10 @@ examples/6krb25apr/
 ```sh
 # 1. Compute sigmatau deviations on the dataset
 julia --threads=auto --project=julia \
-    examples/kf_pipeline/compute_devs.jl 6krb25apr
+    scripts/julia/compute_all_devs.jl reference/raw/6krb25apr.txt
 
 # 2. Visual overlay vs Stable32
-python3 examples/kf_pipeline/plot_devs.py 6krb25apr
+python3 scripts/python/plot_devs.py 6krb25apr
 ```
 
-Results land under `examples/kf_pipeline/results/6krb25apr/` (gitignored).
+Results land under `results/6krb25apr/` (gitignored).

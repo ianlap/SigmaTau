@@ -6,7 +6,7 @@ fallback in kf_pipeline.jl) uses to select fit regions. Also draws reference
 slope lines for WPM (σ slope −3/2), WFM (−1/2), RWFM (+1/2).
 
 Usage (from repo root):
-    python3 examples/kf_pipeline/plot_mhdev_preview.py <dataset>
+    python3 scripts/python/plot_mhdev_preview.py <dataset>
 
 Reads:  results/<dataset>/kf/mhdev_preview.csv
 Writes: results/<dataset>/kf/mhdev_preview.png

@@ -20,7 +20,7 @@ Produces two figures:
     has moved to compensate for unmodelled structure.
 
 Usage (from repo root):
-  python3 examples/kf_pipeline/plot_kf.py <dataset>
+  python3 scripts/python/plot_kf.py <dataset>
 
 Reads:
   results/<dataset>/kf/kf_pipeline_summary.csv

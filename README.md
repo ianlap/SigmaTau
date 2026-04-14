@@ -44,9 +44,10 @@ kf     = kf_pipeline(phase, tau0)
 
 Both accept `data_type = :freq` to pass frequency data instead of phase — the engine handles the conversion.
 
-## Examples
+## Scripts & Examples
 
-Runnable scripts live in `examples/` (MATLAB + Julia side-by-side) and `matlab/examples/`, `julia/examples/`. Start with `examples/noise_id_validation/` and `examples/kf_pipeline/`.
+- `scripts/`: Production-ready command-line tools for stability analysis and Kalman filtering (Julia, MATLAB, Python).
+- `examples/`: Guided examples and validation datasets (e.g., `noise_id_validation`, `mixed_noise_validation`).
 
 ## Tests
 
