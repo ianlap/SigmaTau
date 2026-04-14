@@ -134,8 +134,8 @@ def get_sigmatau_results(phase_data, tau0, m_list):
     return results
 
 def main():
-    data_path = "reference/stable32gen.DAT"
-    s32_full_csv = "reference/stable32out/stable32_data_full.csv"
+    data_path = "reference/validation/stable32gen.DAT"
+    s32_full_csv = "reference/validation/stable32out/stable32_data_full.csv"
     
     x = read_stable32_data(data_path)
     tau0 = 1.0
@@ -211,10 +211,10 @@ def main():
             })
             
     report_df = pd.DataFrame(report)
-    report_df.to_csv("reference/stable32out/comprehensive_comparison.csv", index=False)
+    report_df.to_csv("reference/validation/stable32out/comprehensive_comparison.csv", index=False)
     
     # Generate Markdown Report
-    with open("reference/stable32out/comprehensive_comparison.md", "w") as f:
+    with open("reference/validation/stable32out/comprehensive_comparison.md", "w") as f:
         f.write("# Comprehensive Comparison: Stable32 vs allantools vs SigmaTau\n\n")
         
         for s32_type in report_df['Type'].unique():

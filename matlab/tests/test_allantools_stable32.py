@@ -6,7 +6,7 @@ import os
 
 def test_allantools_vs_stable32():
     # 1. Load data
-    data_path = "reference/stable32gen.DAT"
+    data_path = "reference/validation/stable32gen.DAT"
     # Skip header lines (marked with # or descriptive text)
     # The header ends after "# Header End"
     phase_data = []
@@ -26,7 +26,7 @@ def test_allantools_vs_stable32():
     tau0 = 1.0
     
     # 2. Load Stable32 summary
-    stable32_summary_path = "reference/stable32out/stable32_summary.csv"
+    stable32_summary_path = "reference/validation/stable32out/stable32_summary.csv"
     s32_df = pd.read_csv(stable32_summary_path)
     
     # Filter for Overlapping Allan (as SigmaTau's adev is overlapping by default)

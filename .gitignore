@@ -24,11 +24,14 @@ results/
 steering_results/
 examples/*/results/
 
-# Reference PDFs (local only)
-*.pdf
-
-# Reference data (large local-only files: Stable32.exe, sample phase logs)
-reference/
+# Reference data
+!reference/validation/
+reference/raw/
+reference/bin/
+reference/*.exe
+reference/*.txt
+reference/*.DAT
+reference/stable32out/
 
 # Example datasets that are large or user-supplied
 examples/noise_id_validation/*.csv

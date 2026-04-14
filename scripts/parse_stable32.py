@@ -69,8 +69,8 @@ def parse_stable32_output(filepath):
     return all_data
 
 if __name__ == "__main__":
-    input_file = "reference/stable32out/stable32out.txt"
-    output_file = "reference/stable32out/stable32_data_full.csv"
+    input_file = "reference/validation/stable32out/stable32out.txt"
+    output_file = "reference/validation/stable32out/stable32_data_full.csv"
     
     data = parse_stable32_output(input_file)
     
