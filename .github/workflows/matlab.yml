@@ -18,12 +18,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up MATLAB
-        uses: mathworks/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@v3
 
-      - name: Run all tests
-        uses: mathworks/run-command@v2
+      - name: Run tests
+        uses: matlab-actions/run-tests@v3
         with:
-          command: addpath(genpath('matlab')); run('matlab/tests/run_all.m')
+          # Add matlab/ to the search path before running tests
+          source-folder: matlab
 
   lint:
     name: MATLAB Syntax Check
@@ -33,10 +34,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up MATLAB
-        uses: mathworks/setup-matlab@v2
+        uses: matlab-actions/setup-matlab@v3
 
       - name: Check syntax with checkcode
-        uses: mathworks/run-command@v2
+        uses: matlab-actions/run-command@v3
         with:
           command: |
             files = dir(fullfile('matlab','**','*.m'));
