@@ -6,28 +6,49 @@
     noise_id(x, m_list, data_type="phase", dmin=0, dmax=2) → Vector{Float64}
 
 Dominant power-law noise estimator.  Returns a vector of estimated α exponents
-(one per element of `m_list`), or NaN where estimation fails.
+(one per element of `m_list`), or NaN where every method fails.
 
-For N_eff ≥ 30, uses the lag-1 ACF method (SP1065 §5.6).
-For N_eff < 30, falls back to the B1-ratio / R(n) method.
+Dispatch (SP1065 §5.6 / Stable32 manual):
+  1. `N_eff ≥ NEFF_RELIABLE` → lag-1 ACF (primary)
+  2. `N_eff <  NEFF_RELIABLE` → B1-ratio / R(n) (reliable once m² scaled)
+  3. Both above return NaN   → carry forward the most recent reliable α
+
+Carry-forward matches Stable32's "use the previous noise type estimate at the
+longest averaging time" rule — the last-resort when neither ACF nor B1/R(n)
+can produce an estimate for this τ.
 """
+# NEFF_RELIABLE: minimum N_eff for lag-1 ACF to be numerically trustworthy.
+# SP1065 §5.6 cites 30 as the theoretical minimum, but empirically the ACF
+# estimator is still high-variance just above that boundary. 50 is a
+# conservative working threshold that stabilises the long-τ tail.
+const NEFF_RELIABLE = 50
+
 function noise_id(x::Vector{Float64}, m_list::Vector{Int},
                   data_type::String = "phase",
                   dmin::Int = 0, dmax::Int = 2)
     x_clean = _preprocess(x)
+    N = length(x_clean)
     alpha_list = fill(NaN, length(m_list))
+    last_reliable = NaN
 
     for (k, m) in enumerate(m_list)
-        N_eff = floor(Int, length(x_clean) / m)
+        N_eff = N ÷ m
+        alpha = NaN
         try
-            if N_eff >= 30
+            if N_eff >= NEFF_RELIABLE
                 alpha, = _noise_id_lag1acf(x_clean, m, data_type, dmin, dmax)
             else
                 alpha, = _noise_id_b1rn(x_clean, m, data_type)
             end
-            alpha_list[k] = Float64(alpha)
         catch err
             @warn "noise_id: estimation failed for m=$m — $(err)"
+        end
+
+        if !isnan(alpha)
+            alpha_list[k]  = Float64(alpha)
+            last_reliable  = alpha_list[k]
+        elseif !isnan(last_reliable)
+            alpha_list[k]  = last_reliable   # last-resort: carry forward
         end
     end
 
@@ -86,9 +107,12 @@ function _noise_id_lag1acf(x::Vector{Float64}, m::Int, data_type::String,
 end
 
 function _lag1_acf(x::Vector{Float64})
-    xm = x .- mean(x)
-    all(xm .== 0) && return NaN
-    return sum(@view(xm[1:end-1]) .* @view(xm[2:end])) / sum(abs2, xm)
+    xm   = x .- mean(x)
+    ssx  = sum(abs2, xm)
+    # Guard for constant input: after mean-subtraction the detrend residuals
+    # are O(ε)·N rather than exact zeros, so use a tolerance rather than ==0.
+    ssx < eps(Float64) * length(x) && return NaN
+    return sum(@view(xm[1:end-1]) .* @view(xm[2:end])) / ssx
 end
 
 # ── B1-ratio / R(n) fallback ──────────────────────────────────────────────────
@@ -104,19 +128,22 @@ function _noise_id_b1rn(x::Vector{Float64}, m::Int, data_type::String)
         x_dec = x[1:m:end]
         x_dec = detrend_quadratic(x_dec)
 
-        avar_val = _simple_avar(x_dec, 1)      # variance at m=1 on decimated data
+        # AVAR at τ = m·τ₀.  Computed from decimated phase so the detrend above
+        # (which stabilises long-drift records) carries through; the m² factor
+        # corrects `_simple_avar(..., 1)` to SP1065 Eq. 14's m²·τ₀² denominator.
+        avar_val = _simple_avar(x_dec, 1) / Float64(m)^2
         N_avar   = length(x_dec) - 2
 
         dx = diff(x)
         Nd = (length(dx) ÷ m) * m
-        Nd < m && return (0, -2, NaN)
+        Nd < m && return (NaN, -2, NaN)
         y_blocks   = reshape(dx[1:Nd], m, :)
         y_avg      = vec(mean(y_blocks, dims=1))
         var_class  = var(y_avg; corrected=false)
 
     elseif lowercase(data_type) == "freq"
         N = (length(x) ÷ m) * m
-        N < 2m && return (0, -2, NaN)
+        N < 2m && return (NaN, -2, NaN)
         y_avg     = vec(mean(reshape(x[1:N], m, :), dims=1))
         y_avg     = detrend_linear(y_avg)
         dy        = diff(y_avg)
@@ -127,7 +154,7 @@ function _noise_id_b1rn(x::Vector{Float64}, m::Int, data_type::String)
         throw(ArgumentError("data_type must be \"phase\" or \"freq\""))
     end
 
-    (isnan(avar_val) || avar_val <= 0) && return (0, -2, NaN)
+    (isnan(avar_val) || avar_val <= 0) && return (NaN, -2, NaN)
 
     B1_obs = var_class / avar_val
 
@@ -164,15 +191,18 @@ end
 
 # ── B1 / R(n) theory tables ───────────────────────────────────────────────────
 
-# Theoretical B1 ratio (classical-var / Allan-var) vs. noise slope μ.
-# Closed forms for integer μ; general formula (SP1065 Eq. 75 / Howe–Beard 1998) otherwise.
+# Theoretical B1 ratio (classical-var / Allan-var) vs. noise slope μ
+# where μ is defined by σ²_y(τ) ∝ τ^μ.
+# Closed forms for integer μ; general formula (SP1065 Eq. 73 / Howe–Beard 1998) otherwise.
+#   μ = +2 → FW FM (α=-3)        μ =  0 → FLFM  (α=-1)        μ = -2 → WHPM/FLPM (α=2,1)
+#   μ = +1 → RWFM  (α=-2)        μ = -1 → WHFM  (α= 0)
 function _b1_theory(N::Int, mu::Int)
-    if mu == 2;  return N * (N + 1) / 6               # RWFM (μ=+2)
-    elseif mu == 1;  return N / 2                     # FLFM (μ=+1)
-    elseif mu == 0;  return N * log(N) / (2 * (N - 1) * log(2))  # WHFM (μ=0)
-    elseif mu == -1; return 1.0                       # FLPM (μ=-1) reference
-    elseif mu == -2; return (N^2 - 1) / (1.5 * N * (N - 1))      # WHPM (μ=-2)
-    else;            return (N * (1 - N^mu)) / (2 * (N - 1) * (1 - 2^mu))  # SP1065 Eq. 75
+    if mu == 2;  return N * (N + 1) / 6                            # FW FM
+    elseif mu == 1;  return N / 2                                  # RWFM
+    elseif mu == 0;  return N * log(N) / (2 * (N - 1) * log(2))    # FLFM
+    elseif mu == -1; return 1.0                                    # WHFM (reference)
+    elseif mu == -2; return (N^2 - 1) / (1.5 * N * (N - 1))        # WHPM/FLPM
+    else;            return (N * (1 - N^mu)) / (2 * (N - 1) * (1 - 2^mu))  # SP1065 Eq. 73
     end
 end
 

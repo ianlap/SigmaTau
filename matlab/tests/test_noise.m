@@ -94,6 +94,28 @@ x_const = ones(100, 1);
 a_const = sigmatau.noise.identify(x_const, [1]);
 assert(isnan(a_const), 'identify: constant data should yield NaN');
 
+% ── identify: no spurious α=2 at long τ (regression test) ────────────────────
+% Before the B1/R(n) m² fix and carry-forward policy, every noise type except
+% WHPM spuriously returned α=2 once N_eff dropped below the lag-1 ACF threshold
+% (B1's R(n) discrimination degenerated). Assert that red-spectrum inputs
+% (WHFM, RWFM) do not default to +2 at the tail.
+
+rng(50);
+N_cf = 2^14;                                         % 16384
+ms   = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];  % tail N_eff: 128 → 16
+
+% RWFM: tail α must be firmly negative (bug would give α=+2)
+x_rwfm_cf = sigmatau.noise.generate(-2, N_cf);
+a_rwfm_cf = sigmatau.noise.identify(x_rwfm_cf, ms, 'phase');
+assert(round(a_rwfm_cf(end)) <= -1, ...
+       sprintf('regression: RWFM tail α=%.2f, expected ≤-1', a_rwfm_cf(end)));
+
+% WHFM: tail α must be ≤0 (WHFM or FLFM — both defensible at the boundary)
+x_wfm_cf  = sigmatau.noise.generate(0, N_cf);
+a_wfm_cf  = sigmatau.noise.identify(x_wfm_cf, ms, 'phase');
+assert(round(a_wfm_cf(end)) <= 0, ...
+       sprintf('regression: WFM tail α=%.2f, expected ≤0', a_wfm_cf(end)));
+
 % ── noise_id wrapper: must equal identify ─────────────────────────────────────
 
 rng(42);

@@ -215,5 +215,6 @@ using SigmaTau
     include("test_hadamard_family.jl")
     include("test_total_family.jl")
     include("test_filter.jl")
+    include("test_noise_id.jl")
 
 end  # @testset "SigmaTau"

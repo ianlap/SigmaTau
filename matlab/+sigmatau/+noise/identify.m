@@ -3,8 +3,14 @@ function alpha_list = identify(x, m_list, data_type, dmin, dmax)
 %
 %   alpha_list = sigmatau.noise.identify(x, m_list, data_type, dmin, dmax)
 %
-%   For N_eff >= 30: uses lag-1 ACF method (SP1065 §5.6).
-%   For N_eff <  30: falls back to B1-ratio / R(n) method.
+%   Dispatch (SP1065 §5.6 / Stable32 manual):
+%     1. N_eff >= NEFF_RELIABLE : lag-1 ACF (primary)
+%     2. N_eff <  NEFF_RELIABLE : B1-ratio / R(n) (reliable once m^2 scaled)
+%     3. Both above return NaN  : carry forward the most recent reliable alpha
+%
+%   Carry-forward is the Stable32 manual's "use the previous noise type
+%   estimate at the longest averaging time" rule — the last-resort when
+%   neither ACF nor B1/R(n) can produce an estimate for this tau.
 %
 %   Inputs:
 %     x         – phase or frequency data (column vector)
@@ -15,29 +21,39 @@ function alpha_list = identify(x, m_list, data_type, dmin, dmax)
 %
 %   Output:
 %     alpha_list – estimated alpha values (NaN where estimation fails)
-%
-%   Note: the operator-precedence guard in the B1/Rn fallback (isnan check)
-%   is correctly written as an `if` statement, avoiding the Julia bug
-%   described in PR #7.
+
+% NEFF_RELIABLE: SP1065 §5.6 cites 30 as the theoretical lag-1 ACF minimum,
+% but the estimator is still high-variance just above that. 50 is a
+% conservative working threshold that stabilises the long-τ tail.
+NEFF_RELIABLE = 50;
 
 if nargin < 3 || isempty(data_type), data_type = 'phase'; end
 if nargin < 4 || isempty(dmin),      dmin = 0; end
 if nargin < 5 || isempty(dmax),      dmax = 2; end
 
-x_clean    = preprocess_x(x);
-alpha_list = NaN(size(m_list));
+x_clean       = preprocess_x(x);
+alpha_list    = NaN(size(m_list));
+last_reliable = NaN;
 
 for k = 1:numel(m_list)
     m     = m_list(k);
     N_eff = floor(numel(x_clean) / m);
+    alpha = NaN;
     try
-        if N_eff >= 30
-            alpha_list(k) = identify_lag1acf(x_clean, m, data_type, dmin, dmax);
+        if N_eff >= NEFF_RELIABLE
+            alpha = identify_lag1acf(x_clean, m, data_type, dmin, dmax);
         else
-            alpha_list(k) = identify_b1rn(x_clean, m, data_type);
+            alpha = identify_b1rn(x_clean, m, data_type);
         end
     catch err
         warning('SigmaTau:identify', 'Estimation failed for m=%d: %s', m, err.message);
+    end
+
+    if ~isnan(alpha)
+        alpha_list(k) = alpha;
+        last_reliable = alpha;
+    elseif ~isnan(last_reliable)
+        alpha_list(k) = last_reliable;   % last-resort: carry forward
     end
 end
 end
@@ -93,12 +109,15 @@ end
 end
 
 function r1 = lag1_acf(x)
-x = x(:) - mean(x);
-if all(x == 0)
+x   = x(:) - mean(x);
+ssx = sum(x.^2);
+% Guard for constant input: detrend residuals are O(eps)*N rather than
+% exact zeros, so use a tolerance rather than ==0.
+if ssx < eps * numel(x)
     r1 = NaN;
     return;
 end
-r1 = sum(x(1:end-1) .* x(2:end)) / sum(x.^2);
+r1 = sum(x(1:end-1) .* x(2:end)) / ssx;
 end
 
 % ── B1-ratio / R(n) fallback ──────────────────────────────────────────────────
@@ -110,13 +129,16 @@ function alpha_int = identify_b1rn(x, m, data_type)
 if strcmpi(data_type, 'phase')
     x_dec = x(1:m:end);
     x_dec = sigmatau.util.detrend(x_dec, 2);
-    avar_val   = simple_avar(x_dec, 1);
+    % AVAR at tau = m*tau0. Computed from decimated phase so the detrend
+    % above carries through; the m^2 factor corrects simple_avar(..., 1)
+    % to SP1065 Eq. 14's m^2*tau0^2 denominator.
+    avar_val   = simple_avar(x_dec, 1) / double(m)^2;
     N_avar     = numel(x_dec) - 2;
 
     dx  = diff(x);
     Nd  = floor(numel(dx) / m) * m;
     if Nd < m
-        alpha_int = 0;
+        alpha_int = NaN;   % signal failure to caller
         return;
     end
     dx        = dx(1:Nd);
@@ -127,7 +149,7 @@ if strcmpi(data_type, 'phase')
 elseif strcmpi(data_type, 'freq')
     N = floor(numel(x) / m) * m;
     if N < 2*m
-        alpha_int = 0;
+        alpha_int = NaN;   % signal failure to caller
         return;
     end
     y_avg     = mean(reshape(x(1:N), m, []), 1)';
@@ -140,9 +162,9 @@ else
     error('SigmaTau:identify', 'data_type must be ''phase'' or ''freq''');
 end
 
-% Guard: if avar is NaN or non-positive, return 0 (no correction)
+% Guard: if avar is NaN or non-positive, signal failure to caller.
 if isnan(avar_val) || avar_val <= 0
-    alpha_int = 0;
+    alpha_int = NaN;
     return;
 end
 B1_obs = var_class / avar_val;
@@ -183,16 +205,19 @@ end
 % ── B1 / R(n) theory ─────────────────────────────────────────────────────────
 
 function B1 = b1_theory(N, mu)
-% Theoretical B1 = classical-var / Allan-var vs. noise slope mu.
-% Closed forms for integer mu; SP1065 Eq. 75 (Howe–Beard 1998) otherwise.
+% Theoretical B1 = classical-var / Allan-var vs. noise slope mu,
+% where mu is defined by sigma_y^2(tau) ~ tau^mu.
+% Closed forms for integer mu; SP1065 Eq. 73 (Howe-Beard 1998) otherwise.
+%   mu = +2 → FW FM (alpha=-3)    mu =  0 → FLFM  (alpha=-1)    mu = -2 → WHPM/FLPM (alpha=2,1)
+%   mu = +1 → RWFM  (alpha=-2)    mu = -1 → WHFM  (alpha= 0)
 switch mu
-    case  2; B1 = N*(N+1)/6;                        % RWFM (mu=+2)
-    case  1; B1 = N/2;                              % FLFM (mu=+1)
-    case  0; B1 = N*log(N) / (2*(N-1)*log(2));      % WHFM (mu=0)
-    case -1; B1 = 1.0;                              % FLPM (mu=-1) reference
-    case -2; B1 = (N^2 - 1) / (1.5 * N * (N-1));    % WHPM (mu=-2)
+    case  2; B1 = N*(N+1)/6;                        % FW FM
+    case  1; B1 = N/2;                              % RWFM
+    case  0; B1 = N*log(N) / (2*(N-1)*log(2));      % FLFM
+    case -1; B1 = 1.0;                              % WHFM (reference)
+    case -2; B1 = (N^2 - 1) / (1.5 * N * (N-1));    % WHPM/FLPM
     otherwise
-        B1 = (N * (1 - N^mu)) / (2 * (N-1) * (1 - 2^mu));   % SP1065 Eq. 75
+        B1 = (N * (1 - N^mu)) / (2 * (N-1) * (1 - 2^mu));   % SP1065 Eq. 73
 end
 end
 
