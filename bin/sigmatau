@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+# sigmatau — launcher for the SigmaTauCLI Julia app.
+#
+# Resolves this script's real path (so a symlink elsewhere in $PATH still
+# finds the Julia project) and invokes Julia with the CLI project activated.
+
+# POSIX realpath of this script, following symlinks.
+script="$0"
+while [ -L "$script" ]; do
+    link="$(readlink "$script")"
+    case "$link" in
+        /*) script="$link" ;;
+        *)  script="$(dirname "$script")/$link" ;;
+    esac
+done
+SCRIPT_DIR="$(cd "$(dirname "$script")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT="$REPO_ROOT/julia/cli/SigmaTauCLI"
+
+exec julia --threads=auto --project="$PROJECT" --startup-file=no \
+     -e 'using SigmaTauCLI; SigmaTauCLI.main()' -- "$@"
