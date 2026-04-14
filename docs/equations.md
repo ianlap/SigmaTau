@@ -169,14 +169,15 @@ reflection → modified Allan sum (cumsum second differences averaged over `m`).
 MTOTVAR(τ) = 1 / (2(mτ₀)² · (N-3m+1)) · Σₙ Σⱼ (aⱼ₊₂ - 2aⱼ₊₁ + aⱼ)²/(6m)
 ```
 
-where `aⱼ` = m-point averages of the cumsum-reflected extended segment.
+where `aⱼ` = m-point averages of the cumsum-reflected extended segment (length 9m).
+The inner sum over `j` spans `6m` terms.
 
 **Implementation** (`julia/src/deviations.jl:_mtotdev_kernel`,
 `matlab/+sigmatau/+dev/mtotdev.m:mtotdev_kernel`): identical algorithms — half-avg
-detrend, `[rev; seg; rev]` extension, cumsum prefix sums, `Σd2²/(6m)` per sub,
-divided by `2(mτ₀)²·nsubs`.
+detrend, full 3-part `[rev; seq; rev]` extension, cumsum prefix sums, `Σd2²/(6m)`
+per sub, divided by `2(mτ₀)²·nsubs`.
 
-**Status**: ✓ Verified. MATLAB and Julia kernels are structurally identical.
+**Status**: ✓ Verified against SP1065 §5.12 and Stable32 (2026-04-14).
 
 ---
 
@@ -188,19 +189,17 @@ divided by `2(mτ₀)²·nsubs`.
 algorithm — this is a documented intentional exception (CLAUDE.md).
 
 **m > 1**: Convert to frequency `y = diff(x)/τ₀`; for each of `Ny-3m+1` segments of
-length `3m`: half-average detrend → `[rev; seg; rev]` extension → cumsum Hadamard
-differences.
+length `3m`: half-average detrend → `[rev; seq; rev]` extension → cumsum Hadamard
+differences. Sum over `6m` terms.
 
 **Implementation** (`julia/src/deviations.jl:_htotdev_kernel`,
 `matlab/+sigmatau/+dev/htotdev.m:htotdev_kernel`): MATLAB and Julia are structurally
 identical, including the m=1 branch.
 
-**Bias correction**: Applied by engine (inferred from method name `htotdev`). Direction (multiply vs
-divide) is flagged in CLAUDE.md as needing verification against SP1065 table and
-Julia output.
+**Bias correction**: Applied by engine: `deviation_corrected = deviation_raw / B`.
+Confirmed by comparison with Stable32 (unbiased results match Stable32).
 
-**Status**: ✓ Kernels match between MATLAB and Julia. ⚠ Bias correction direction
-requires cross-validation (see CLAUDE.md known bugs).
+**Status**: ✓ Verified. Kernels match and bias correction direction is correct.
 
 ---
 
@@ -218,14 +217,13 @@ block_var = Σ avg² / (n_avg · 6m²)    where avg is m-point cumsum window of 
 
 **Implementation** (`julia/src/deviations.jl:_mhtotdev_kernel`,
 `matlab/+sigmatau/+dev/mhtotdev.m:mhtotdev_kernel`): identical algorithms — linear
-(`detrend_linear`) detrend, `[rev; seg; rev]` extension, cumsum third-diffs, m-point
-moving average via cumsum.
+(`detrend_linear`) detrend, full 3-part `[rev; seq; rev]` extension, cumsum
+third-diffs, m-point moving average via cumsum.
 
 **EDF**: No published analytical model. Engine uses approximate coefficients from
 FCS 2001 (inferred total EDF mode for `mhtotdev`).
 
-**Status**: ✓ MATLAB and Julia kernels are structurally identical. EDF is
-approximate (FCS 2001 only).
+**Status**: ✓ Verified structurally.
 
 ---
 
@@ -348,7 +346,6 @@ x_pred[2] += steer        # frequency correction
 | # | Location | Issue | Status |
 |---|----------|-------|--------|
 | 1 | MDEV | MB23 Eq. 4.4.3.2 omits `1/m` normalization factor inside brackets | ✓ Code is correct (matches SP1065 Eq. 16); book has a typo |
-| 2 | `htotdev` bias correction | Multiply vs. divide direction not confirmed | ⚠ Verify against SP1065 bias table and Julia output |
-| 3 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
-| 4 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
-| 5 | MATLAB KF | `matlab/+sigmatau/+kf/` is empty — no MATLAB Kalman filter implementation | ⚠ Not yet ported from Julia |
+| 2 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
+| 3 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
+| 4 | MATLAB KF | `matlab/+sigmatau/+kf/` is empty — no MATLAB Kalman filter implementation | ⚠ Not yet ported from Julia |
