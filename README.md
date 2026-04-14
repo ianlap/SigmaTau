@@ -49,6 +49,32 @@ Both accept `data_type = :freq` to pass frequency data instead of phase — the 
 - `scripts/`: Production-ready command-line tools for stability analysis and Kalman filtering (Julia, MATLAB, Python).
 - `examples/`: Guided examples and validation datasets (e.g., `noise_id_validation`, `mixed_noise_validation`).
 
+## Tool Handbook (Help Section)
+
+For full command syntax, options, and workflow recipes, use the handbook:
+
+- [Handbook index](docs/handbook/index.md)
+- [CLI command reference (`sigmatau`)](docs/handbook/cli.md)
+- [Julia scripts reference](docs/handbook/julia_scripts.md)
+- [Python tools reference](docs/handbook/python_tools.md)
+- [MATLAB scripts reference](docs/handbook/matlab_scripts.md)
+- [Workflow recipes](docs/handbook/workflows.md)
+
+### Quick reference
+
+| Tool | Purpose | Minimal invocation |
+| :--- | :--- | :--- |
+| `bin/sigmatau` | Interactive CLI for loading data, computing deviations, plotting, and export | `bin/sigmatau` |
+| `scripts/julia/compute_all_devs.jl` | Batch compute all 10 deviations | `julia --project=julia scripts/julia/compute_all_devs.jl <file> <tau0>` |
+| `scripts/julia/mhdev_preview.jl` | Fast noise-character preview for KF prep | `julia --project=julia scripts/julia/mhdev_preview.jl <dataset>` |
+| `scripts/julia/kf_pipeline.jl` | Full noise-fit + KF optimization + filtering pipeline | `julia --project=julia scripts/julia/kf_pipeline.jl <dataset>` |
+| `scripts/python/plot_devs.py` | Multi-deviation log-log plot generation | `python3 scripts/python/plot_devs.py <dataset>` |
+| `scripts/python/plot_kf.py` | KF diagnostics plotting | `python3 scripts/python/plot_kf.py <dataset>` |
+| `scripts/python/mhdev_fit_interactive.py` | Interactive power-law fit UI | `python3 scripts/python/mhdev_fit_interactive.py <dataset>` |
+| `scripts/python/generate_comprehensive_report.py` | Stable32/allantools/SigmaTau cross-validation report | `python3 scripts/python/generate_comprehensive_report.py` |
+| `scripts/matlab/compute_all_devs.m` | MATLAB batch all-deviation run | `compute_all_devs('<file>', tau0)` |
+| `scripts/matlab/kf_pipeline.m` | MATLAB KF pipeline | `kf_pipeline('<file>', tau0)` |
+
 ## Tests
 
 ```bash

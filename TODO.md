@@ -21,6 +21,16 @@ This document outlines future development tasks, prioritized by impact and estim
 | **Clock Steering Examples** | Add more comprehensive examples in `examples/` demonstrating PID steering against real-world clock data (e.g., GPS vs. H-Maser). | 🟢 Easy |
 | **Documentation Guide** | Create a high-level architectural guide in `docs/` explaining the shared engine pattern and Kalman Filter kinematics. | 🟢 Easy |
 
+## Priority: Medium (Documentation Program — Handbook Rollout)
+
+| Task | Description | Difficulty |
+| :--- | :--- | :--- |
+| **CLI Reference Parity** | Ensure handbook command docs match `julia/cli/SigmaTauCLI/src/commands/output.jl` `HELP_LINES` and parser behavior in `parser.jl`. | 🟢 Easy |
+| **Script Argument Coverage** | Add syntax/argument documentation for every user-facing script under `scripts/julia`, `scripts/python`, and `scripts/matlab`. | 🟢 Easy |
+| **Data Contract Docs** | Document accepted input formats (single-column phase, two-column MJD+phase), `tau0` inference rules, and output folder conventions. | 🟢 Easy |
+| **Workflow Recipes** | Publish practical “runbook” flows (quick all-dev run, full KF loop, validation report generation) with expected artifacts. | 🟢 Easy |
+| **Docs Definition of Done** | Add a checklist requiring each public tool page to include purpose, syntax, options table, examples, outputs, and troubleshooting. | 🟢 Easy |
+
 ## Priority: Low (Technical Debt & Refinement)
 
 | Task | Description | Difficulty |
