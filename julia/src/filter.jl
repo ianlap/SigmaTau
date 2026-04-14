@@ -45,7 +45,7 @@ struct KalmanResult
     steers::Vector{Float64}
     sumsteers::Vector{Float64}
     sum2steers::Vector{Float64}
-    P_history::Vector{Matrix{Float64}}
+    P_history::Array{Float64, 3}
     config::KalmanConfig
 end
 
@@ -189,7 +189,7 @@ function kalman_filter(data::Vector{Float64}, cfg::KalmanConfig)
     steers_v    = zeros(Float64, N)
     sumsteers_v = zeros(Float64, N)
     sum2steer_v = zeros(Float64, N)
-    P_history   = [zeros(Float64, ns, ns) for _ in 1:N]
+    P_history   = Array{Float64, 3}(undef, ns, ns, N)
 
     phase = copy(data)  # working copy — updated each step
 
@@ -248,7 +248,7 @@ function kalman_filter(data::Vector{Float64}, cfg::KalmanConfig)
         residuals_v[k] = resid
         innov_v[k]     = innov
         steers_v[k]    = steer
-        P_history[k]   = copy(Matrix(P))
+        P_history[:, :, k] .= P
     end
 
     return KalmanResult(phase_est, freq_est, drift_est, residuals_v, innov_v,

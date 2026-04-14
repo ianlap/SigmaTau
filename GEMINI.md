@@ -24,7 +24,7 @@ This document contains absolute mandates for the SigmaTau project. These instruc
 - **Noise ID**: Implement dual-path identification:
     - If $ N_{eff} \geq 30 $: Use lag-1 ACF.
     - If $ N_{eff} < 30 $: Use $ B_1 $ ratio + $ R(n) $ lookup.
-- **Totdev Denominator**: Use $ 2(N-1)(m\tau_0)^2 $ as per SP1065 §5.2.11 (not $ N-2 $).
+- **Totdev Denominator**: Use $ 2(N-2)(m\tau_0)^2 $ as per SP1065 Eq. 25 (not $ N-1 $).
 
 ### Kalman Filter & Steering
 - **PID Convention**: The integral term MUST accumulate phase error: `sumx += x(1)`.

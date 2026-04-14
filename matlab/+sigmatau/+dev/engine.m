@@ -15,7 +15,8 @@ function result = engine(x, tau0, m_list, kernel, params, varargin)
 %                 .d           – difference order (2=Allan, 3=Hadamard)
 %                 .F_fn        – @(m) → F (m for unmodified, 1 for modified)
 %                 .dmin, .dmax – noise_id differencing bounds
-%               Total EDF/bias behavior is inferred from params.name.
+%                 .total_type  – string for total dev EDF (e.g. 'totvar') or empty
+%                 .bias_type   – string for bias correction (e.g. 'totvar') or empty
 %
 %   Name-Value:
 %     'data_type' – 'phase' (default) or 'freq'
@@ -95,9 +96,8 @@ for k = 1:L
         alpha_k = round(a);
     end
 
-    total_type = total_type_for_name(params.name);
-    if ~isempty(total_type)
-        edf(k) = sigmatau.stats.totaldev_edf(total_type, alpha_k, T_rec, tau(k));
+    if ~isempty(params.total_type)
+        edf(k) = sigmatau.stats.totaldev_edf(params.total_type, alpha_k, T_rec, tau(k));
     else
         F = params.F_fn(m);
         edf(k) = sigmatau.stats.calculate_edf(alpha_k, params.d, m, F, 1, N);
@@ -128,9 +128,8 @@ result = struct( ...
 
 % Bias correction (applied in-place; only for total deviations) — must run
 % before CI so intervals bracket the bias-corrected deviation.
-bias_type = bias_type_for_name(params.name);
-if ~isempty(bias_type)
-    result = apply_bias(result, bias_type, T_rec);
+if ~isempty(params.bias_type)
+    result = apply_bias(result, params.bias_type, T_rec);
 end
 
 result.ci = sigmatau.stats.ci(result);
@@ -138,31 +137,7 @@ end
 
 % ── Helpers ───────────────────────────────────────────────────────────────────
 
-function total_type = total_type_for_name(name)
-switch name
-    case 'totdev'
-        total_type = 'totvar';
-    case 'mtotdev'
-        total_type = 'mtot';
-    case 'htotdev'
-        total_type = 'htot';
-    case 'mhtotdev'
-        total_type = 'mhtot';
-    otherwise
-        total_type = '';
-end
-end
 
-function bias_type = bias_type_for_name(name)
-switch name
-    case 'totdev'
-        bias_type = 'totvar';
-    case 'htotdev'
-        bias_type = 'htot';
-    otherwise
-        bias_type = '';
-end
-end
 
 function result = empty_result(name, tau0, N)
 CONFIDENCE_DEFAULT = 0.683;

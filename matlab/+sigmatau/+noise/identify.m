@@ -58,21 +58,6 @@ for k = 1:numel(m_list)
 end
 end
 
-% ── Preprocessing ─────────────────────────────────────────────────────────────
-
-function x_out = preprocess_x(x)
-% Remove >5σ outliers then linear detrend (mirrors Julia _preprocess).
-x = x(:);
-x_mean = mean(x);
-x_std  = std(x);
-if x_std < eps
-    x_out = sigmatau.util.detrend(x, 1);
-    return;
-end
-z     = abs((x - x_mean) / x_std);
-x_out = sigmatau.util.detrend(x(z < 5.0), 1);
-end
-
 % ── Lag-1 ACF method ──────────────────────────────────────────────────────────
 
 function alpha = identify_lag1acf(x, m, data_type, dmin, dmax)
@@ -132,7 +117,7 @@ if strcmpi(data_type, 'phase')
     % AVAR at tau = m*tau0. Computed from decimated phase so the detrend
     % above carries through; the m^2 factor corrects simple_avar(..., 1)
     % to SP1065 Eq. 14's m^2*tau0^2 denominator.
-    avar_val   = simple_avar(x_dec, 1) / double(m)^2;
+    avar_val   = sigmatau.dev.adev_kernel(x_dec, 1, 1.0) / double(m)^2;
     N_avar     = numel(x_dec) - 2;
 
     dx  = diff(x);
@@ -188,7 +173,7 @@ end
 % Refine alpha=2 vs alpha=1 using R(n) for White PM vs Flicker PM
 if mu_best == -2 && strcmpi(data_type, 'phase')
     adev_val = sqrt(avar_val);
-    mdev_val = simple_mdev(x, m, 1.0);
+    mdev_val = sqrt(sigmatau.dev.mdev_kernel(x, m, 1.0));
     if ~isnan(mdev_val) && adev_val > 0
         Rn_obs = (mdev_val / adev_val)^2;
         R_hi   = rn_theory(m, 0);    % alpha=2 (White PM)
@@ -200,69 +185,4 @@ if mu_best == -2 && strcmpi(data_type, 'phase')
         end
     end
 end
-end
-
-% ── B1 / R(n) theory ─────────────────────────────────────────────────────────
-
-function B1 = b1_theory(N, mu)
-% Theoretical B1 = classical-var / Allan-var vs. noise slope mu,
-% where mu is defined by sigma_y^2(tau) ~ tau^mu.
-% Closed forms for integer mu; SP1065 Eq. 73 (Howe-Beard 1998) otherwise.
-%   mu = +2 → FW FM (alpha=-3)    mu =  0 → FLFM  (alpha=-1)    mu = -2 → WHPM/FLPM (alpha=2,1)
-%   mu = +1 → RWFM  (alpha=-2)    mu = -1 → WHFM  (alpha= 0)
-switch mu
-    case  2; B1 = N*(N+1)/6;                        % FW FM
-    case  1; B1 = N/2;                              % RWFM
-    case  0; B1 = N*log(N) / (2*(N-1)*log(2));      % FLFM
-    case -1; B1 = 1.0;                              % WHFM (reference)
-    case -2; B1 = (N^2 - 1) / (1.5 * N * (N-1));    % WHPM/FLPM
-    otherwise
-        B1 = (N * (1 - N^mu)) / (2 * (N-1) * (1 - 2^mu));   % SP1065 Eq. 73
-end
-end
-
-function Rn = rn_theory(af, b)
-% Theoretical R(n) = MVAR/AVAR ratio (SP1065 §5.6 / Riley §5.2.6).
-% Used to resolve WHPM (b=0) vs. FLPM (b=-1) after the B1 ratio test.
-switch b
-    case 0
-        Rn = 1.0 / af;                              % WHPM asymptotic: R → 1/m
-    case -1
-        % FLPM: leading-order MVAR/AVAR ratio
-        avar = (1.038 + 3*log(2*pi*0.5*af)) / (4*pi^2);
-        mvar = 3*log(256/27) / (8*pi^2);
-        Rn   = mvar / avar;
-    otherwise
-        Rn = 1.0;
-end
-end
-
-% ── Helpers ───────────────────────────────────────────────────────────────────
-
-function v = simple_avar(x, m)
-% Basic overlapping Allan variance at averaging factor m. SP1065 Eq. 10.
-N = numel(x);
-L = N - 2*m;
-if L <= 0
-    v = NaN;
-    return;
-end
-d2 = x(1+2*m:N) - 2*x(1+m:N-m) + x(1:L);
-v  = sum(d2.^2) / (L * 2 * m^2);
-end
-
-function md = simple_mdev(x, m, tau0)
-% Basic modified Allan deviation via prefix-sum (no noise ID).
-N  = numel(x);
-Ne = N - 3*m + 1;
-if Ne <= 0
-    md = NaN;
-    return;
-end
-S  = cumsum([0; x]);
-s1 = S(1+m:Ne+m)     - S(1:Ne);
-s2 = S(1+2*m:Ne+2*m) - S(1+m:Ne+m);
-s3 = S(1+3*m:Ne+3*m) - S(1+2*m:Ne+2*m);
-d  = (s3 - 2*s2 + s1) / m;
-md = sqrt(sum(d.^2) / (Ne * 2 * m^2 * tau0^2));
 end

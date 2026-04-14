@@ -78,15 +78,38 @@ _default_mlist(N::Int, min_factor::Int) =
     [2^k for k in 0:floor(Int, log2(N / min_factor))]
 
 """
+    detrend_linear!(x)
+
+Remove linear trend from data in-place via least-squares fit.
+Uses a numerically stable two-pass algorithm.
+"""
+function detrend_linear!(x::AbstractVector{T}) where T<:Real
+    n = length(x)
+    n < 2 && return x
+    x_bar = (n + 1) / 2.0
+    sum_num = 0.0
+    sum_y = 0.0
+    for i in 1:n
+        val = Float64(x[i])
+        sum_num += (i - x_bar) * val
+        sum_y += val
+    end
+    ss_xx = n * (Float64(n)^2 - 1) / 12.0
+    slope = sum_num / ss_xx
+    y_bar = sum_y / n
+    for i in 1:n
+        x[i] -= T(y_bar + slope * (i - x_bar))
+    end
+    return x
+end
+
+"""
     detrend_linear(x)
 
 Remove linear trend from data via least-squares fit.
 """
 function detrend_linear(x::AbstractVector{T}) where T<:Real
-    n = length(x)
-    n < 2 && return copy(x)
-    A = [ones(T, n) T.(1:n)]
-    return x - A * (A \ x)
+    return detrend_linear!(copy(x))
 end
 
 """

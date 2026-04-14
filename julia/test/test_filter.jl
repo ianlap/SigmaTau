@@ -34,7 +34,7 @@ using Statistics
         @test length(result.drift_est)   == N
         @test length(result.residuals)   == N
         @test length(result.innovations) == N
-        @test length(result.P_history)   == N
+        @test size(result.P_history, 3)  == N
         @test all(isfinite, result.phase_est)
         @test all(isfinite, result.freq_est)
         @test all(isfinite, result.residuals)
@@ -78,7 +78,7 @@ using Statistics
             P0      = P0_scalar,
         )
         result = kalman_filter(x_wfm, cfg)
-        p11_final = result.P_history[end][1, 1]
+        p11_final = result.P_history[1, 1, end]
         # Steady-state P[1,1] must be much smaller than the initial P0
         @test p11_final < P0_scalar / 1000
         # Steady-state P[1,1] must be finite and positive

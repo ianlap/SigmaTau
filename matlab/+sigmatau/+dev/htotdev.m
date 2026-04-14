@@ -19,7 +19,9 @@ params = struct( ...
     'd',          3,         ...
     'F_fn',       @(m) m,    ...
     'dmin',       0,         ...
-    'dmax',       2          ...
+    'dmax',       2,         ...
+    'total_type', 'htot',    ...
+    'bias_type',  'htot'     ...
 );
 
 result = sigmatau.dev.engine(x, tau0, m_list, @htotdev_kernel, params, varargin{:});
@@ -54,14 +56,19 @@ end
 seg_len = 3*m;
 dev_sum = 0.0;
 
-for i = 0:(n_iter - 1)
-    xs = y(i+1 : i+seg_len);
+CY      = cumsum([0; y]);
+p_range = (0:seg_len)';
+mid     = floor(seg_len / 2);
+T_H     = p_range .* (p_range - 1) / 2 - p_range * mid;
+j_range = (0:6*m-1)';
 
-    % Half-average detrend on frequency segment (matches Julia _htotdev_kernel)
+for i = 0:(n_iter - 1)
+    n = i + 1;
+    % Half-average detrend on frequency segment
     hi       = floor(seg_len / 2);
     lo_start = ceil(seg_len / 2) + 1;
-    m1 = sum(xs(1:hi)) / hi;
-    m2 = sum(xs(lo_start:seg_len)) / (seg_len - lo_start + 1);
+    m1 = (CY(n+hi) - CY(n)) / hi;
+    m2 = (CY(n+seg_len) - CY(n+lo_start-1)) / (seg_len - lo_start + 1);
 
     if mod(seg_len, 2) == 1   % seg_len is odd
         slope = (m2 - m1) / (0.5*(seg_len-1) + 1);
@@ -69,18 +76,19 @@ for i = 0:(n_iter - 1)
         slope = (m2 - m1) / (0.5*seg_len);
     end
 
-    mid = floor(seg_len / 2);
-    x0  = xs - slope * ((0:seg_len-1)' - mid);
+    % SumX0_vec(p+1) = sum_{k=1}^p (y(n+k-1) - slope * (k-1-mid))
+    SumX0_vec = (CY(n+p_range) - CY(n)) - slope * T_H;
 
-    % Symmetric reflection: [rev(x0); x0; rev(x0)]
-    xstar = [x0(end:-1:1); x0; x0(end:-1:1)];
+    % Reflection: cs has 3 parts [rev(x0); x0; rev(x0)]
+    % SR(p+1) = cumsum([0; rev(x0)], p)
+    S_end = SumX0_vec(end);
+    SR = S_end - SumX0_vec(end:-1:1);
+    cs = [SR; S_end + SumX0_vec(2:end); 2*S_end + SR(2:end)];
 
-    % Cumsum of extended frequency sequence
-    cs = [0; cumsum(xstar)];
-    j  = (0:6*m-1)';
-    h1 = (cs(j+m+1)   - cs(j+1))    / m;
-    h2 = (cs(j+2*m+1) - cs(j+m+1))  / m;
-    h3 = (cs(j+3*m+1) - cs(j+2*m+1)) / m;
+    % Hadamard cumsum differences
+    h1 = (cs(j_range+m+1)   - cs(j_range+1))    / m;
+    h2 = (cs(j_range+2*m+1) - cs(j_range+m+1))  / m;
+    h3 = (cs(j_range+3*m+1) - cs(j_range+2*m+1)) / m;
     H  = h3 - 2*h2 + h1;
 
     dev_sum = dev_sum + sum(H.^2) / (6*m);

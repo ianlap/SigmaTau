@@ -339,11 +339,26 @@ end
 # SP1065 §5.2.11 Eq. 25: phase-form denominator is 2τ²(N-2), not the number of overlap samples.
 function _totdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
     N = length(x)
-    xd = detrend_linear(x)
+    T = eltype(x)
+    xd = copy(x)
+    detrend_linear!(xd)
+
     # Symmetric reflection: [rev(xd[2:N-1]) mirrored about xd[1]; xd; rev mirrored about xd[N]]
-    x_left  = 2xd[1]   .- @view(xd[2:N-1])       # length N-2
-    x_right = 2xd[end] .- @view(xd[N-1:-1:2])     # length N-2
-    x_star  = [x_left; xd; x_right]               # length 3N-4
+    # Extended array length: (N-2) + N + (N-2) = 3N-4
+    x_star = Vector{T}(undef, 3N - 4)
+    # Left part: 2xd[1] - xd[2:N-1]
+    for i in 1:N-2
+        x_star[i] = 2xd[1] - xd[i+1]
+    end
+    # Center part: xd
+    for i in 1:N
+        x_star[N-2+i] = xd[i]
+    end
+    # Right part: 2xd[end] - xd[N-1:-1:2]
+    for i in 1:N-2
+        x_star[2N-2+i] = 2xd[N] - xd[N-i]
+    end
+
     off = N - 2   # x_star[off+i] == xd[i] for i in 1:N
 
     D = 0.0; count = 0
@@ -613,15 +628,21 @@ function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
 
     T = eltype(x)
     Lp = 3m + 1   # phase segment length
+    ext_len = 3Lp
+    L3 = ext_len - 3m
+
+    # Preallocate buffers outside the subsegment loop
+    pd     = Vector{T}(undef, Lp)
+    ext    = Vector{T}(undef, ext_len)
+    d3_vec = Vector{T}(undef, L3)
+    S      = Vector{T}(undef, L3 + 1)
 
     total_sum = 0.0
     for n in 1:nsubs
-        phase_seg = @view(x[n:n + 3m])
-        pd = detrend_linear(phase_seg)   # returns a new vector of length Lp
+        copyto!(pd, 1, x, n, Lp)
+        detrend_linear!(pd)
 
         # Symmetric reflection: [rev(pd); pd; rev(pd)]
-        ext_len = 3Lp
-        ext = Vector{T}(undef, ext_len)
         for j in 1:Lp
             ext[j]        = pd[Lp - j + 1]
             ext[Lp + j]   = pd[j]
@@ -629,17 +650,18 @@ function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
         end
 
         # Third differences on extended array
-        L3 = ext_len - 3m
-        L3 <= 0 && continue
-        d3_vec = Vector{T}(undef, L3)
         for j in 1:L3
             d3_vec[j] = ext[j] - 3ext[j+m] + 3ext[j+2m] - ext[j+3m]
         end
 
         # Moving average via cumsum (length-m windows over third differences)
-        if length(d3_vec) >= m
-            S     = cumsum([zero(T); d3_vec])
-            n_avg = length(S) - m
+        S[1] = zero(T)
+        for j in 1:L3
+            S[j+1] = S[j] + d3_vec[j]
+        end
+        
+        n_avg = L3 + 1 - m
+        if n_avg > 0
             block_var = 0.0
             for j in 1:n_avg
                 a = S[j+m] - S[j]

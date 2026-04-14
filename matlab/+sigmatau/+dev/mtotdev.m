@@ -17,7 +17,9 @@ params = struct( ...
     'd',          2,         ...
     'F_fn',       @(m) 1,    ...
     'dmin',       0,         ...
-    'dmax',       2          ...
+    'dmax',       2,         ...
+    'total_type', 'mtot',    ...
+    'bias_type',  ''         ...
 );
 
 result = sigmatau.dev.engine(x, tau0, m_list, @mtotdev_kernel, params, varargin{:});
@@ -37,31 +39,34 @@ seg_len   = 3*m;
 half_n    = seg_len / 2;
 outer_sum = 0.0;
 
-for n = 1:nsubs
-    seq = x(n : n + seg_len - 1);
+CX      = cumsum([0; x]);
+p_range = (0:seg_len)';
+T2      = p_range .* (p_range - 1) / 2;
+j_range = (0:3*m)';
 
-    % Half-average detrend (matches Julia _mtotdev_kernel)
+for n = 1:nsubs
+    % Half-average detrend without slicing
     if m == 1
-        slope = (seq(3) - seq(1)) / (2*tau0);
+        slope = (x(n+2) - x(n)) / (2*tau0);
     else
         hi = floor(half_n);
-        s1 = sum(seq(1:hi)) / hi;
-        s2 = sum(seq(hi+1:seg_len)) / (seg_len - hi);
+        s1 = (CX(n+hi) - CX(n)) / hi;
+        s2 = (CX(n+seg_len) - CX(n+hi)) / (seg_len - hi);
         slope = (s2 - s1) / (half_n * tau0);
     end
-    seq_det = seq - slope * tau0 * (0:seg_len-1)';
 
-    % Symmetric reflection: [rev(seq_det); seq_det; rev(seq_det)]
-    ext = [seq_det(end:-1:1); seq_det; seq_det(end:-1:1)];
+    % SumS_vec(p+1) = sum_{i=1}^p (x(n+i-1) - slope*tau0*(i-1))
+    SumS_vec = (CX(n+p_range) - CX(n)) - slope * tau0 * T2;
 
-    % Cumsum of extended sequence. Loop range 0:3m (3m+1 positions) matches
-    % Julia _mtotdev_kernel: for j in 0:(6m - 3m) == 0:3m
-    cs = cumsum([0; ext]);
-    j_range = (0:3*m)';       % 3m+1 indices (0-based)
-    j1 = j_range + 1;         % 1-based index into cs (cs(j+1) in Julia)
-    a1 = (cs(j1 + m)   - cs(j1))     / m;
-    a2 = (cs(j1 + 2*m) - cs(j1 + m)) / m;
-    a3 = (cs(j1 + 3*m) - cs(j1 + 2*m)) / m;
+    % Reflection: cs(1:3m+1) is rev(seq_det), cs(3m+1:6m+1) is seq_det
+    % cs(k+1) = SumS(seg_len) - SumS(seg_len-k) for k=0:seg_len
+    % cs(k+1) = SumS(seg_len) + SumS(k-seg_len) for k=seg_len:2*seg_len
+    cs = [SumS_vec(end) - SumS_vec(end:-1:2); SumS_vec(end) + SumS_vec];
+
+    % d2 calculation using cs (length 6m+1)
+    a1 = (cs(j_range + m + 1)   - cs(j_range + 1))       / m;
+    a2 = (cs(j_range + 2*m + 1) - cs(j_range + m + 1))   / m;
+    a3 = (cs(j_range + 3*m + 1) - cs(j_range + 2*m + 1)) / m;
     d2 = a3 - 2*a2 + a1;
 
     outer_sum = outer_sum + sum(d2.^2) / (6*m);
@@ -70,3 +75,4 @@ end
 v    = outer_sum / (2 * (m*tau0)^2 * nsubs);
 neff = nsubs;
 end
+

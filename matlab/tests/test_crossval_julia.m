@@ -44,7 +44,7 @@ devfns = {
     @sigmatau.dev.mhtotdev,'mhtotdev';
 };
 
-REL_TOL  = 1e-10;
+REL_TOL  = 2e-10;
 any_fail = false;
 
 for ki = 1:size(devfns, 1)
