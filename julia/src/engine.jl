@@ -58,10 +58,13 @@ function engine(
     neff = Vector{Int}(undef, length(ms))
     edf  = Vector{Float64}(undef, length(ms))
 
+    # Precompute prefix sums once for kernels that use them (mdev, mhdev, etc)
+    x_cs = cumsum([zero(eltype(x)); x])
+
     T_rec = (N - 1) * tau0   # record duration for total deviation EDF
 
     for (k, m) in enumerate(ms)
-        var_val, n = kernel(x, m, tau0)
+        var_val, n = kernel(x, m, tau0, x_cs)
 
         if n <= 0 || isnan(var_val)
             dev[k]  = NaN

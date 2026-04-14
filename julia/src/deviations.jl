@@ -43,7 +43,7 @@ end
 
 # Kernel: returns (variance, neff)  — engine takes sqrt internally
 # SP1065 Eq. 14: AVAR(τ) = mean(d²) / (2m²τ₀²)
-function _adev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _adev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     L = N - 2m
     L <= 0 && return (NaN, 0)
@@ -92,16 +92,15 @@ end
 
 # Kernel: cumsum prefix-sum approach, O(N) per m
 # SP1065 Eq. 15: MVAR(τ) = Σ(s3 - 2s2 + s1)² / (Ne · 2m² · τ₀²)
-function _mdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _mdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N  = length(x)
     Ne = N - 3m + 1
     Ne <= 0 && return (NaN, 0)
-    x_cs = cumsum([zero(eltype(x)); x])   # length N+1, prefix sums
-    s1 = @view(x_cs[1+m:Ne+m])   .- @view(x_cs[1:Ne])
-    s2 = @view(x_cs[1+2m:Ne+2m]) .- @view(x_cs[1+m:Ne+m])
-    s3 = @view(x_cs[1+3m:Ne+3m]) .- @view(x_cs[1+2m:Ne+2m])
-    d  = (s3 .- 2 .* s2 .+ s1) ./ m
-    v  = sum(abs2, d) / (Ne * 2 * m^2 * tau0^2)   # SP1065 Eq. 15
+    # Identity: s3 - 2s2 + s1 = x_cs[i+3m] - 3x_cs[i+2m] + 3x_cs[i+m] - x_cs[i]
+    d  = @view(x_cs[1+3m:Ne+3m]) .- 3 .* @view(x_cs[1+2m:Ne+2m]) .+
+         3 .* @view(x_cs[1+m:Ne+m]) .- @view(x_cs[1:Ne])
+    # Divide by 2*m^4*tau0^2 because d is Σx_i (unscaled block-sum difference)
+    v  = sum(abs2, d) / (Ne * 2 * m^4 * tau0^2)
     return (v, Ne)
 end
 
@@ -131,21 +130,8 @@ function tdev(
     m_list    :: Union{Nothing, AbstractVector{<:Integer}} = nothing,
     data_type :: Symbol = :phase,
 )
-    mr    = mdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ TDEV_MDEV_PREFACTOR
-    ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
-    return DeviationResult(
-        mr.tau,
-        scale .* mr.deviation,
-        mr.edf,
-        ci_scaled,
-        mr.alpha,
-        mr.neff,
-        mr.tau0,
-        mr.N,
-        "tdev",
-        mr.confidence,
-    )
+    mr = mdev(x, tau0; m_list, data_type)
+    return _scale_result(mr, mr.tau ./ TDEV_MDEV_PREFACTOR, "tdev")
 end
 
 # ── HDEV ──────────────────────────────────────────────────────────────────────
@@ -190,7 +176,7 @@ end
 
 # Kernel: returns (variance, neff) — engine takes sqrt internally
 # SP1065 HVAR: HVAR(τ) = mean(d3²) / (6m²τ₀²)
-function _hdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _hdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     L = N - 3m
     L <= 0 && return (NaN, 0)
@@ -236,19 +222,16 @@ function mhdev(
 end
 
 # Kernel: returns (variance, neff) — engine takes sqrt internally
-# Third differences + moving average via cumsum trick
-function _mhdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+# SP1065: MHVAR = ⟨(s4 - 3s3 + 3s2 - s1)²⟩ / (6 * m^4 * tau0^2)
+function _mhdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     Ne = N - 4m + 1
     Ne <= 0 && return (NaN, 0)
-    # Third differences of the phase data
-    d4 = @view(x[1:Ne]) .- 3 .* @view(x[1+m:Ne+m]) .+
-         3 .* @view(x[1+2m:Ne+2m]) .- @view(x[1+3m:Ne+3m])
-    # Moving average via cumsum (length-m sums over d4)
-    S = cumsum([zero(eltype(x)); d4])  # length Ne+1
-    avg = @view(S[m+1:end]) .- @view(S[1:end-m])  # length Ne+1-m
-    # Variance: meansq(avg) / (6 * m^4 * tau0^2)
-    v = sum(abs2, avg) / (length(avg) * 6 * m^4 * tau0^2)
+    # Identity: s4 - 3s3 + 3s2 - s1 = x_cs[i+4m] - 4x_cs[i+3m] + 6x_cs[i+2m] - 4x_cs[i+m] + x_cs[i]
+    d = @view(x_cs[1+4m:Ne+4m]) .- 4 .* @view(x_cs[1+3m:Ne+3m]) .+
+        6 .* @view(x_cs[1+2m:Ne+2m]) .- 4 .* @view(x_cs[1+m:Ne+m]) .+
+        @view(x_cs[1:Ne])
+    v = sum(abs2, d) / (Ne * 6 * m^4 * tau0^2)
     return (v, Ne)
 end
 
@@ -282,20 +265,7 @@ function ldev(
     data_type :: Symbol = :phase,
 )
     mr = mhdev(x, tau0; m_list, data_type)
-    scale = mr.tau ./ LDEV_MHDEV_PREFACTOR
-    ci_scaled = mr.ci .* reshape(scale, :, 1)   # (L,2) .* (L,1) broadcast
-    return DeviationResult(
-        mr.tau,
-        scale .* mr.deviation,
-        mr.edf,
-        ci_scaled,
-        mr.alpha,
-        mr.neff,
-        mr.tau0,
-        mr.N,
-        "ldev",
-        mr.confidence,
-    )
+    return _scale_result(mr, mr.tau ./ LDEV_MHDEV_PREFACTOR, "ldev")
 end
 
 # ── TOTDEV ────────────────────────────────────────────────────────────────────
@@ -337,7 +307,7 @@ end
 
 # Kernel: linear detrend + symmetric reflection, then overlapping second differences.
 # SP1065 §5.2.11 Eq. 25: phase-form denominator is 2τ²(N-2), not the number of overlap samples.
-function _totdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _totdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     T = eltype(x)
     xd = copy(x)
@@ -411,7 +381,7 @@ end
 
 # Kernel: accumulates variance over all N-3m+1 subsegments.
 # Each segment: half-average detrend → symmetric reflection → cumsum second-diff.
-function _mtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _mtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     nsubs = N - 3m + 1
     nsubs < 1 && return (NaN, 0)
@@ -509,7 +479,7 @@ end
 
 # Kernel: m==1 uses hdev third-differences; m>1 uses htotdev frequency-segment algorithm.
 # Legacy htotdev reference: uses y=diff(x)/tau0, segments of length 3m, cumsum Hadamard diffs.
-function _htotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _htotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     N = length(x)
     if m == 1
         # Use hdev formula directly (third differences on phase) — CLAUDE.md critical rule
@@ -620,7 +590,7 @@ end
 
 # Kernel: linear detrend per phase segment, symmetric reflection, third diffs + moving avg.
 # Ported from legacy mhtotdev. Variance = total_sum / (nsubs * (m*tau0)^2).
-function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::AbstractVector{<:Real})
     m >= 1 || throw(ArgumentError("averaging factor m must be >= 1"))
     N = length(x)
     nsubs = N - 4m + 1

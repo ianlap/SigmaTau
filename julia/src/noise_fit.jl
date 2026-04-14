@@ -122,7 +122,7 @@ function mhdev_fit(tau::AbstractVector{<:Real},
     τ_vec = Float64.(tau)
 
     for (noise_type, idx_range) in regions
-        idx = _as_unit_range(idx_range)
+        idx = _to_indices(idx_range)
         if _is_powerlaw(noise_type)
             model = getfield(_MHDEV_POWERLAW, noise_type)
             v_sub = var_resid[idx]
@@ -178,10 +178,10 @@ end
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-_as_unit_range(r::UnitRange{Int}) = r
-_as_unit_range(r::AbstractRange{<:Integer}) = UnitRange(Int(first(r)), Int(last(r)))
-_as_unit_range(r::AbstractVector{<:Integer}) =
-    isempty(r) ? (1:0) : UnitRange(Int(first(r)), Int(last(r)))
+_to_indices(r::UnitRange{Int}) = r
+_to_indices(r::AbstractRange{<:Integer}) = r  # Allow non-unit ranges
+_to_indices(r::AbstractVector{<:Integer}) = convert(Vector{Int}, r)
+_to_indices(i::Integer) = Int(i)
 
 # legacy ci2weights.m
 function _ci_to_weights(sigma::Vector{Float64},

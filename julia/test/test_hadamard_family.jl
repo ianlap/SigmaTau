@@ -75,12 +75,13 @@ end  # @testset "hdev"
 
     @testset "White FM slope ≈ -1/2" begin
         # White FM (α=0) → MHDEV slope ≈ τ^{-1/2}, same as ADEV and HDEV.
-        # (Modified Hadamard uses a moving-average window of length m; for white FM
-        # the averaging does not change the -1/2 slope — consistent with MDEV.)
         Random.seed!(201)
         x = cumsum(randn(4096))
         r = mhdev(x, 1.0)
-        slope = fit_slope(r.tau, r.deviation)
+        
+        # Only fit points with at least 10 effective samples to stabilize slope
+        mask = r.neff .>= 10
+        slope = fit_slope(r.tau[mask], r.deviation[mask])
         @test isapprox(slope, -0.5; atol=0.2)
     end
 

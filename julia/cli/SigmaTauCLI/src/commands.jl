@@ -149,8 +149,12 @@ function cmd_dev(session::Session, positional::Vector{String}, flags::Dict)
         r = fn(ds.data, ds.tau0; m_list=m_list, data_type=ds.data_type)
         session.results[(name, dev)] = r
         last_r = r
-        @printf("  %-8s → %d points, σ(τ=%g)=%g\n",
-                dev, length(r.tau), first(r.tau), first(r.deviation))
+        if isempty(r.tau)
+            @printf("  %-8s → 0 points computed\n", dev)
+        else
+            @printf("  %-8s → %d points, σ(τ=%g)=%g\n",
+                    dev, length(r.tau), first(r.tau), first(r.deviation))
+        end
     end
 
     session.last_result = last_r
