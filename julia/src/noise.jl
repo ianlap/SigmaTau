@@ -41,7 +41,11 @@ function noise_id(x::Vector{Float64}, m_list::Vector{Int},
                 alpha, = _noise_id_b1rn(x_clean, m, data_type)
             end
         catch err
-            @warn "noise_id: estimation failed for m=$m — $(err)"
+            if err isa ArgumentError || err isa DomainError
+                @warn "noise_id: power-law estimation failed for m=$m (N_eff=$N_eff) — $(err)"
+            else
+                rethrow(err)
+            end
         end
 
         if !isnan(alpha)

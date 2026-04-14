@@ -48,7 +48,7 @@ using SigmaTau
         x = cumsum(randn(N))
 
         # Minimal adev kernel: second-difference overlapping variance
-        function adev_kernel(x, m, tau0)
+        function adev_kernel(x, m, tau0, x_cs)
             L = length(x) - 2m
             L <= 0 && return (NaN, 0)
             d2 = @view(x[1+2m:end]) .- 2 .* @view(x[1+m:end-m]) .+ @view(x[1:L])
@@ -77,7 +77,7 @@ using SigmaTau
 
     @testset "Engine respects explicit m_list" begin
         x      = cumsum(randn(256))
-        kernel = (x, m, tau0) -> begin
+        kernel = (x, m, tau0, x_cs) -> begin
             L = length(x) - 2m
             L <= 0 && return (NaN, 0)
             d2 = @view(x[1+2m:end]) .- 2 .* @view(x[1+m:end-m]) .+ @view(x[1:L])

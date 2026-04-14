@@ -134,7 +134,15 @@ end
     @test dispatch(session, "   ") === nothing
 end
 
+@testset "dispatch: guard behavior on empty results/datasets" begin
+    session = Session()
+    # Should not throw even with no data or results.
+    @test dispatch(session, "list") === nothing
+    @test dispatch(session, "info") === nothing
+end
+
 @testset "command: list + use + info" begin
+
     session = make_session_with_data()
     @test session.current == :clk
     dispatch(session, "list")

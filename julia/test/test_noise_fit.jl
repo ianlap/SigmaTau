@@ -79,4 +79,15 @@ using SigmaTau
         @test_throws ArgumentError mhdev_fit(tau, sigma, [(:bogus, 1:3)])
     end
 
+    @testset "regression: non-contiguous index vectors [1,3,7]" begin
+        # _to_indices fix: ensure we can fit non-contiguous tau indices.
+        # This occurs when we have a sparse tau list but want to fit regions
+        # that are not contiguous in the vector (e.g., indices 1, 3, 7).
+        tau = Float64.([1, 2, 4, 8, 16, 32, 64, 128])
+        sigma = sqrt.((10/3) .* 1.0 .* tau .^ (-3)) # pure WPM, q=1
+        fit = mhdev_fit(tau, sigma, [(:wpm, [1, 3, 7])])
+        @test fit.q_wpm ≈ 1.0 rtol=1e-10
+        @test fit.regions[1].indices == [1, 3, 7]
+    end
+
 end  # @testset "mhdev_fit"

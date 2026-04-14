@@ -134,3 +134,25 @@ unpack_result(r::DeviationResult, ::Val{2}) = (r.tau, r.deviation)
 unpack_result(r::DeviationResult, ::Val{3}) = (r.tau, r.deviation, r.edf)
 unpack_result(r::DeviationResult, ::Val{4}) = (r.tau, r.deviation, r.edf, r.ci)
 unpack_result(r::DeviationResult, ::Val{5}) = (r.tau, r.deviation, r.edf, r.ci, r.alpha)
+
+"""
+    _scale_result(mr::DeviationResult, factor::AbstractVector{<:Real}, method::String)
+
+Internal helper: scale deviation and CI by a τ-dependent factor and update method name.
+Used by TDEV and LDEV wrappers.
+"""
+function _scale_result(mr::DeviationResult, factor::AbstractVector{<:Real}, method::String)
+    ci_scaled = mr.ci .* reshape(factor, :, 1)
+    return DeviationResult(
+        mr.tau,
+        factor .* mr.deviation,
+        mr.edf,
+        ci_scaled,
+        mr.alpha,
+        mr.neff,
+        mr.tau0,
+        mr.N,
+        method,
+        mr.confidence,
+    )
+end

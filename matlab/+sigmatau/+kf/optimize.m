@@ -109,6 +109,13 @@ for i = 1:numel(required)
     if ~isfield(cfg, f)
         error('sigmatau:optimize:MissingField', 'cfg.%s is required', f);
     end
+    if cfg.(f) <= 0
+        error('sigmatau:optimize:InvalidValue', 'cfg.%s must be positive', f);
+    end
+end
+
+if cfg.q_irwfm < 0
+    error('sigmatau:optimize:InvalidValue', 'cfg.q_irwfm must be non-negative');
 end
 
 if ~ismember(cfg.nstates, [2, 3])

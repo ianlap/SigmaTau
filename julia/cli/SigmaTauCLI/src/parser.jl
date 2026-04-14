@@ -11,6 +11,11 @@ const BOOLEAN_FLAGS = Set([
     "verbose",
 ])
 
+# Flags that MUST take a value.
+const VALUE_FLAGS = Set([
+    "on", "m", "tau0", "col", "type", "dev", "save", "out"
+])
+
 """
     tokenize(line) → Vector{String}
 
@@ -63,7 +68,10 @@ function parse_line(line::AbstractString)
             elseif i < length(tokens) # --key value
                 flags[key] = tokens[i+1]
                 i += 1
-            else                      # trailing --flag with no value
+            else                      # trailing --flag
+                if key in VALUE_FLAGS
+                    throw(ArgumentError("missing value for flag --$key"))
+                end
                 flags[key] = true
             end
         else
