@@ -29,7 +29,7 @@ Per-region fit diagnostics returned inside `MHDevFitResult.regions`.
 """
 struct MHDevFitRegion
     noise_type :: Symbol
-    indices    :: UnitRange{Int}
+    indices    :: Vector{Int}
     value      :: Float64
     value_std  :: Float64
     skipped    :: Bool
@@ -178,10 +178,10 @@ end
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-_to_indices(r::UnitRange{Int}) = r
-_to_indices(r::AbstractRange{<:Integer}) = r  # Allow non-unit ranges
+_to_indices(r::UnitRange{Int}) = collect(r)
+_to_indices(r::AbstractRange{<:Integer}) = collect(Int, r)
 _to_indices(r::AbstractVector{<:Integer}) = convert(Vector{Int}, r)
-_to_indices(i::Integer) = Int(i)
+_to_indices(i::Integer) = [Int(i)]
 
 # legacy ci2weights.m
 function _ci_to_weights(sigma::Vector{Float64},
