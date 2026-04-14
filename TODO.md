@@ -6,6 +6,7 @@ This document outlines future development tasks, prioritized by impact and estim
 
 | Task | Description | Difficulty |
 | :--- | :--- | :--- |
+| **Investigating mtot discrepancy** | Investigate and resolve the discrepancy in mtot deviation results between MATLAB and Julia. | 🔴 Hard |
 | **MATLAB KF Unit Tests** | Add dedicated unit tests for the ported Kalman Filter functions in `+kf/` (matching the rigor of `julia/test/test_filter.jl`). | 🟢 Easy |
 | **MHTOTDEV EDF Model** | Refine the MHTOTDEV EDF coefficients. Current implementation uses approximations; a more rigorous Monte Carlo or analytical fit is needed. | 🔴 Hard |
 | **Noise ID Scaling** | Optimize the lag-1 ACF identification for extremely large datasets (N > 10^7) by implementing block-processing or decimation-based estimation. | 🟡 Medium |
