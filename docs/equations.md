@@ -3,14 +3,20 @@
 Maps each algorithm to the authoritative source equation, notes any discrepancies
 between sources, and records audit status.
 
-**Primary references**
+**Primary references** (PDFs in `docs/papers/`):
 
 | Sigil | Full citation |
 |-------|---------------|
-| **MB23** | Banerjee & Matsakis, *An Introduction to Modern Timekeeping and Time Transfer*, Springer 2023 (ISBN 978-3-031-30779-9). Local copy: `matsakis_banerjee.pdf`. |
-| **SP1065** | Riley & Howe, *Handbook of Frequency Stability Analysis*, NIST SP1065, 2008. |
-| **G03** | Greenhall & Riley, "Uncertainty of Stability Variances Based on Finite Samples," PTTI 2003. |
-| **FCS01** | Howe & Schlossberger, "A new method of measuring… modified Hadamard total variance," FCS 2001. |
+| **MB23** | Banerjee & Matsakis, *An Introduction to Modern Timekeeping and Time Transfer*, Springer 2023 (ISBN 978-3-031-30779-9). → `2023_banerjee_matsakis_timekeeping_book.pdf` |
+| **SP1065** | Riley, *Handbook of Frequency Stability Analysis*, NIST SP1065, 2008. → `sp1065.pdf` |
+| **G97** | Greenhall, "The Third-Difference Approach to Modified Allan Variance," IEEE T-IM 46(3), June 1997. → `1997_greenhall_third_difference_mvar_ieeetim.pdf` |
+| **GHP99** | Greenhall, Howe & Percival, "Total Variance, an Estimator of Long-Term Frequency Stability," IEEE UFFC 46(5), Sept 1999. → `1999_greenhall_howe_percival_total_variance_ieee.pdf` |
+| **HV99** | Howe & Vernotte, "Generalization of the Total Variance Approach to the Modified Allan Variance," PTTI 1999 (31st). → `1999_howe_vernotte_total_mvar_ptti.pdf` — canonical **MTOT** reference. |
+| **H00** | Howe, Beard, Greenhall, Vernotte, Riley, "A Total Estimator of the Hadamard Function Used for GPS Operations," PTTI 2000 (32nd). → `2000_howe_total_estimator_hadamard_ptti.pdf` |
+| **FCS01** | Howe, Beard, Greenhall, Vernotte, Riley, "Total Hadamard Variance: Application to Clock Steering by Kalman Filtering," Proc. IEEE FCS 2001. → `2001_howe_total_hadamard_variance_fcs.pdf` — canonical **HTOT** reference; provides bias `a(α)` table used by `totaldev_edf` and `bias` (code's "FCS 2001"). |
+| **GR03** | Greenhall & Riley, "Uncertainty of Stability Variances Based on Finite Differences," PTTI 2003. → `2003_greenhall_riley_uncertainty_stability_variances_ptti.pdf` |
+| **RG04** | Riley & Greenhall, "Power Law Noise Identification Using the Lag 1 Autocorrelation," 18th EFTF 2004. → `2004_riley_greenhall_lag1_acf_noiseid.pdf` |
+| **H05** | Howe et al., "Enhancements to GPS Operations and Clock Evaluations Using a 'Total' Hadamard Deviation," IEEE UFFC 52(8), Aug 2005. → `2005_howe_total_hadamard_ieee.pdf` |
 
 ---
 
@@ -42,27 +48,33 @@ SP1065 Eq. 14 and MB23 §4.2.
 
 ### MDEV — Modified Allan deviation
 
-**Formula** (SP1065 Eq. 16; MB23 §4.4.3 Eq. 4.4.3.1):
+**Formula** (SP1065 Eq. 16; MB23 §4.4.3):
 
 ```
-MVAR(τ) = 1 / (2N_e(mτ₀)²) · Σⱼ [1/m · Σₖ₌₀^{m-1} (x[j+k+2m] - 2x[j+k+m] + x[j+k])]²
+MVAR(τ) = 1 / (2m⁴τ₀²·N_e) · Σⱼ [Σₖ₌₀^{m-1} (x[j+k+2m] - 2x[j+k+m] + x[j+k])]²
 ```
 
-where `N_e = N - 3m + 1` (number of complete windows).
+where `N_e = N − 3m + 1` (number of complete windows) and `τ = mτ₀`. No `1/m`
+factor appears inside the brackets in SP1065 or MB23 — the normalization lives
+entirely outside as `1/(2m⁴τ₀²·N_e)`.
 
 **Implementation** (cumsum / prefix-sum form; `julia/src/deviations.jl:_mdev_kernel`,
 `matlab/+sigmatau/+dev/mdev.m:mdev_kernel`):
 
 ```julia
 # Prefix sums s, then sliding window of length m
-d = (s[j+2m] - 2*s[j+m] + s[j]) / m    # inner 1/m average
+d = (s[j+2m] - 2*s[j+m] + s[j]) / m    # <-- inner 1/m is an algorithmic artifact
 v = sum(abs2, d) / (Ne * 2 * m^2 * tau0^2)
 ```
 
-**Status**: ✓ Verified. The `1/m` factor inside the brackets is correct; it is
-**absent** from MB23 Eq. 4.4.3.2 — that appears to be a typo in the book. The code
-matches SP1065 Eq. 16.  Mathematical check: for white FM noise,
-MVAR/AVAR → 1/2 asymptotically (correct); omitting `1/m` gives ratio → ∞ (wrong).
+The `1/m` inside the kernel is **not** part of the textbook formula — it is a
+by-product of the prefix-sum / third-difference formulation (G97). Writing the
+inner sum as an average pulls one factor of `1/m` inside the brackets, which
+becomes `1/m²` after squaring; the outer normalization is therefore reduced from
+`1/(2m⁴τ₀²·N_e)` to `1/(2m²τ₀²·N_e)`. The two forms are algebraically identical.
+
+**Status**: ✓ Verified. Mathematical check: for white FM noise, MVAR/AVAR → 1/2
+asymptotically.
 
 ---
 
@@ -104,34 +116,53 @@ SP1065 Eq. 18.
 
 ### MHDEV — Modified Hadamard deviation
 
-**Formula** (SP1065 §5.8; MB23 §4.5, modified form):
+**Formula** (SP1065 §5.2.10; MB23 §4.5, modified form):
 
 ```
-MHVAR(τ) = 1 / (6N_e(mτ₀)²) · Σⱼ [1/m · Σₖ₌₀^{m-1} (x[j+k+3m] - 3x[j+k+2m] + 3x[j+k+m] - x[j+k])]²
+MHVAR(τ) = 1 / (6m⁴τ₀²·N_e) · Σⱼ [Σₖ₌₀^{m-1} (x[j+k+3m] - 3x[j+k+2m] + 3x[j+k+m] - x[j+k])]²
 ```
 
-where `N_e = N - 4m + 1`.
+where `N_e = N − 4m + 1` and `τ = mτ₀`.
 
 **Implementation** (`julia/src/deviations.jl:_mhdev_kernel`, `matlab/+sigmatau/+dev/mhdev.m:mhdev_kernel`):
-Cumsum-based; analogous to MDEV but with third-difference kernel; denominator `6m²τ₀²`.
+Cumsum-based; analogous to MDEV but with third-difference kernel. The same `1/m`
+artifact from the prefix-sum formulation appears inside the kernel and is
+absorbed by the `1/(6m²τ₀²·N_e)` outer factor — algebraically equivalent to the
+textbook `1/(6m⁴τ₀²·N_e)` form above.
 
 **Status**: ✓ Verified structurally. Mirrors MDEV/HDEV relationship.
 
 ---
 
-### LDEV — Loran-C deviation
+### LDEV — Lapinski deviation
 
-**Formula** (SP1065 §5.6):
+A time-stability analog of MHDEV (this project — Ian Lapinski). Relates to
+MHDEV in the same way TDEV relates to MDEV, but inherits MHDEV's improved
+drift resistance and convergence over a wider range of divergent noise types
+(down to RRFM / α = −4).
+
+**Formula**:
 
 ```
-LVAR(τ) = (τ² / 6) · MHVAR(τ)
-LDEV(τ) = √LVAR(τ)
+LVAR(τ) = (3τ² / 10) · MHVAR(τ)
+LDEV(τ) = τ · MHDEV(τ) / √(10/3)
 ```
+
+The `√(10/3)` prefactor is the Hadamard analog of TDEV's `√3` (SP1065 §5.2.6,
+Eq. 17): each comes from the integral of the variance's sampling-function
+squared against the frequency-to-time-error kernel; the third-difference
+sampling function of MHDEV yields `10/3` where MDEV's second-difference yields
+`3`. Not a standard NIST SP1065 statistic — no §5 reference applies.
 
 **Implementation** (`julia/src/deviations.jl:ldev`, `matlab/+sigmatau/+dev/ldev.m`):
-Calls `mhdev`, then scales by `sqrt(tau^2 / 6)`.
+Calls `mhdev`, then scales by `tau / sqrt(10/3)`.
 
-**Status**: ✓ Verified. Scaling factor matches SP1065 §5.6.
+```julia
+const LDEV_MHDEV_PREFACTOR = sqrt(10 / 3)   # LDEV = τ · MHDEV / √(10/3)
+```
+
+**Status**: ✓ Verified. Prefactor `√(10/3)` matches MATLAB (current + legacy)
+and Julia implementations.
 
 ---
 
@@ -205,7 +236,7 @@ Confirmed by comparison with Stable32 (unbiased results match Stable32).
 
 ### MHTOTDEV — Modified Hadamard total deviation
 
-**Formula** (FCS 2001, Howe & Schlossberger; no MB23 coverage):
+**Formula** (MTOT-style extension of MHDEV, following HV99 + FCS01 total methodology; no MB23 coverage):
 
 For each of `N-4m+1` subsegments of phase length `3m+1`: linear detrend → symmetric
 reflection → third differences + length-m moving average.
@@ -220,8 +251,9 @@ block_var = Σ avg² / (n_avg · 6m²)    where avg is m-point cumsum window of 
 (`detrend_linear`) detrend, full 3-part `[rev; seq; rev]` extension, cumsum
 third-diffs, m-point moving average via cumsum.
 
-**EDF**: No published analytical model. Engine uses approximate coefficients from
-FCS 2001 (inferred total EDF mode for `mhtotdev`).
+**EDF**: No published analytical model dedicated to MHTOT. Engine uses the
+FCS01 HTOT coefficients as an approximation (inferred total EDF mode for
+`mhtotdev`) — noted as a known limitation, not a verified model.
 
 **Status**: ✓ Verified structurally.
 
@@ -345,7 +377,9 @@ x_pred[2] += steer        # frequency correction
 
 | # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 1 | MDEV | MB23 Eq. 4.4.3.2 omits `1/m` normalization factor inside brackets | ✓ Code is correct (matches SP1065 Eq. 16); book has a typo |
+| 1 | MDEV / MHDEV | Code kernels carry an explicit inner `1/m` not present in SP1065 Eq. 16 or MB23 §4.4.3 | ✓ Algebraic artifact of the prefix-sum / third-difference (G97) formulation — outer normalization is `1/(2m²τ₀²·N_e)` instead of `1/(2m⁴τ₀²·N_e)`; the two forms are identical. No source typo. |
 | 2 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
-| 3 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
+| 3 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N−4m+1` or `N−3m`? | ✓ Both MATLAB and Julia use `N−4m+1`; consistent with HV99 / FCS01 total methodology |
 | 4 | MATLAB KF | `matlab/+sigmatau/+kf/` implementation available. | ✓ Ported from Julia |
+| 5 | MHTOT reference attribution | Prior docs cited "Howe & Schlossberger, FCS 2001" — no such paper exists | ✓ Replaced: FCS01 = Howe/Beard/Greenhall/Vernotte/Riley 2001 (HTOT paper). MHTOT itself has no dedicated canonical reference; inferred from HV99 (MTOT) + FCS01 (HTOT). Code comments still say "FCS 2001" for MHTOT coefficients — understood to mean the HTOT table applied as approximation. |
+| 6 | LDEV | Prior docs called it "Loran-C deviation" and cited SP1065 §5.6; §5.6 is "Bias Functions" — citation was bogus and formula `(τ²/6)·MHVAR` did not match the code's `√(10/3)` prefactor | ✓ Renamed **Lapinski Deviation**; formula updated to `LVAR = (3τ²/10)·MHVAR` to match MATLAB + Julia |
