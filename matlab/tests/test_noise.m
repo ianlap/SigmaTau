@@ -68,31 +68,31 @@ N_id = 4096;
 
 % White FM phase data → expect alpha ≈ 0
 x_wfm = sigmatau.noise.generate(0, N_id);
-a_wfm = sigmatau.noise.identify(x_wfm, [1], 'phase');
-assert(~isnan(a_wfm), 'identify: returned NaN for WFM');
-assert(round(a_wfm) == 0, sprintf('identify: WFM alpha=%.2f, expected ~0', a_wfm));
+a_wfm = sigmatau.noise.noise_id(x_wfm, [1], 'phase');
+assert(~isnan(a_wfm), 'noise_id: returned NaN for WFM');
+assert(round(a_wfm) == 0, sprintf('noise_id: WFM alpha=%.2f, expected ~0', a_wfm));
 
 % RWFM phase data → expect alpha ≈ -2
 x_rwfm = sigmatau.noise.generate(-2, N_id);
-a_rwfm = sigmatau.noise.identify(x_rwfm, [1], 'phase');
-assert(~isnan(a_rwfm), 'identify: returned NaN for RWFM');
-assert(round(a_rwfm) == -2, sprintf('identify: RWFM alpha=%.2f, expected ~-2', a_rwfm));
+a_rwfm = sigmatau.noise.noise_id(x_rwfm, [1], 'phase');
+assert(~isnan(a_rwfm), 'noise_id: returned NaN for RWFM');
+assert(round(a_rwfm) == -2, sprintf('noise_id: RWFM alpha=%.2f, expected ~-2', a_rwfm));
 
 % ── identify: B1/Rn fallback (N_eff < 30) ─────────────────────────────────────
 
 % Provide 60 points; use m=3 → N_eff=20 < 30 → B1/Rn path
 rng(13);
 x_small = sigmatau.noise.generate(0, 512);
-a_small = sigmatau.noise.identify(x_small, [20], 'phase');
-assert(~isnan(a_small), 'identify B1/Rn: should return a value');
-assert(isnumeric(a_small) && isscalar(a_small), 'identify B1/Rn: wrong output type');
+a_small = sigmatau.noise.noise_id(x_small, [20], 'phase');
+assert(~isnan(a_small), 'noise_id B1/Rn: should return a value');
+assert(isnumeric(a_small) && isscalar(a_small), 'noise_id B1/Rn: wrong output type');
 
 % ── identify: edge cases ──────────────────────────────────────────────────────
 
 % Constant data → should return NaN (not error)
 x_const = ones(100, 1);
-a_const = sigmatau.noise.identify(x_const, [1]);
-assert(isnan(a_const), 'identify: constant data should yield NaN');
+a_const = sigmatau.noise.noise_id(x_const, [1]);
+assert(isnan(a_const), 'noise_id: constant data should yield NaN');
 
 % ── identify: no spurious α=2 at long τ (regression test) ────────────────────
 % Before the B1/R(n) m² fix and carry-forward policy, every noise type except
@@ -106,23 +106,14 @@ ms   = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];  % tail N_eff: 128 → 16
 
 % RWFM: tail α must be firmly negative (bug would give α=+2)
 x_rwfm_cf = sigmatau.noise.generate(-2, N_cf);
-a_rwfm_cf = sigmatau.noise.identify(x_rwfm_cf, ms, 'phase');
+a_rwfm_cf = sigmatau.noise.noise_id(x_rwfm_cf, ms, 'phase');
 assert(round(a_rwfm_cf(end)) <= -1, ...
        sprintf('regression: RWFM tail α=%.2f, expected ≤-1', a_rwfm_cf(end)));
 
 % WHFM: tail α must be ≤0 (WHFM or FLFM — both defensible at the boundary)
 x_wfm_cf  = sigmatau.noise.generate(0, N_cf);
-a_wfm_cf  = sigmatau.noise.identify(x_wfm_cf, ms, 'phase');
+a_wfm_cf  = sigmatau.noise.noise_id(x_wfm_cf, ms, 'phase');
 assert(round(a_wfm_cf(end)) <= 0, ...
        sprintf('regression: WFM tail α=%.2f, expected ≤0', a_wfm_cf(end)));
-
-% ── noise_id wrapper: must equal identify ─────────────────────────────────────
-
-rng(42);
-x_test = sigmatau.noise.generate(0, 2048);
-m_test = [1, 2, 4, 8];
-a_id   = sigmatau.noise.identify(x_test, m_test, 'phase');
-a_nid  = sigmatau.noise.noise_id(x_test, m_test, 'phase');
-assert(isequal(a_id, a_nid), 'noise_id wrapper must equal identify');
 
 fprintf('test_noise: all assertions passed\n');

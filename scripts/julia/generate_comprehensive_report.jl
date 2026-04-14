@@ -14,7 +14,17 @@ function main()
 
     input_path = ARGS[1]
     tau0 = parse(Float64, ARGS[2])
-    m_list = parse.(Int, split(ARGS[3], ','))
+    # Robust parsing of m_list (comma-separated, handles whitespace/floats/empty)
+    m_raw = split(ARGS[3], ',', keepempty=false)
+    m_list = Int.(round.(parse.(Float64, strip.(m_raw))))
+    
+    # Filter for positive integers only
+    m_list = filter(>(0), m_list)
+    
+    if isempty(m_list)
+        println(stderr, "Error: No valid positive integers found in m_list.")
+        exit(1)
+    end
     
     # Load data
     raw = readdlm(input_path)

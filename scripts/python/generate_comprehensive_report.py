@@ -5,6 +5,9 @@ import subprocess
 import os
 import tempfile
 from io import StringIO
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def read_stable32_data(filepath):
     phase_data = []
@@ -30,10 +33,13 @@ def get_sigmatau_results(phase_data, tau0, m_list):
     try:
         m_list_str = ",".join(map(str, m_list))
         
-        # Call Julia script
+        # Call Julia script with absolute paths
+        julia_project = REPO_ROOT / "julia"
+        julia_script = REPO_ROOT / "scripts/julia/generate_comprehensive_report.jl"
+        
         process = subprocess.run([
-            'julia', '--project=julia',
-            'scripts/julia/generate_comprehensive_report.jl',
+            'julia', f'--project={julia_project}',
+            str(julia_script),
             tmp_path, str(tau0), m_list_str
         ], capture_output=True, text=True)
         
@@ -72,8 +78,8 @@ def get_sigmatau_results(phase_data, tau0, m_list):
             os.remove(tmp_path)
 
 def main():
-    data_path = "reference/validation/stable32gen.DAT"
-    s32_full_csv = "reference/validation/stable32out/stable32_data_full.csv"
+    data_path = REPO_ROOT / "reference/validation/stable32gen.DAT"
+    s32_full_csv = REPO_ROOT / "reference/validation/stable32out/stable32_data_full.csv"
     
     x = read_stable32_data(data_path)
     tau0 = 1.0
@@ -149,10 +155,12 @@ def main():
             })
             
     report_df = pd.DataFrame(report)
-    report_df.to_csv("reference/validation/stable32out/comprehensive_comparison.csv", index=False)
+    output_csv = REPO_ROOT / "reference/validation/stable32out/comprehensive_comparison.csv"
+    report_df.to_csv(output_csv, index=False)
     
     # Generate Markdown Report
-    with open("reference/validation/stable32out/comprehensive_comparison.md", "w") as f:
+    output_md = REPO_ROOT / "reference/validation/stable32out/comprehensive_comparison.md"
+    with open(output_md, "w") as f:
         f.write("# Comprehensive Comparison: Stable32 vs allantools vs SigmaTau\n\n")
         
         for s32_type in report_df['Type'].unique():
