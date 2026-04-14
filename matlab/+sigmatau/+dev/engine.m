@@ -47,7 +47,8 @@ N    = numel(x);
 if isempty(m_list)
     m_list = sigmatau.util.default_mlist(N, params.min_factor);
 end
-m_list = m_list(:)';   % row vector
+m_list = m_list(m_list >= 1);   % Step 5: Filter invalid averaging factors
+m_list = m_list(:)';            % row vector
 
 if isempty(m_list)
     result = empty_result(params.name, tau0, N);
@@ -76,7 +77,14 @@ for k = 1:L
         continue;
     end
 
-    dev(k)  = sqrt(max(var_val, 0));   % guard against fp rounding below zero
+    % Step 1: Guard against negative variance from catastrophic cancellation.
+    % Small negative values (rounding) are clamped to 0; significant negatives → NaN.
+    % Threshold: -eps * N (scale of sum operations).
+    if var_val < -eps * N
+        dev(k) = NaN;
+    else
+        dev(k) = sqrt(max(var_val, 0));
+    end
     neff(k) = n;
 
     % EDF computation

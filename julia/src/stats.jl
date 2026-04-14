@@ -68,7 +68,8 @@ Equivalent degrees of freedom for an overlapping variance estimator.
 - `N`: Number of phase data points
 """
 function calculate_edf(alpha::Int, d::Int, m::Int, F::Int, S::Int, N::Int)
-    alpha + 2d <= 1 && return NaN   # invalid parameter combination
+    # Convergent boundary: 2d + alpha > 1 (Greenhall & Riley 2003, Eq. 4)
+    alpha + 2d <= 1 && return NaN
 
     L = m/F + m*d                    # filter length
     N < L && return NaN
@@ -83,7 +84,7 @@ function calculate_edf(alpha::Int, d::Int, m::Int, F::Int, S::Int, N::Int)
     return M * sz0^2 / basic_sum
 end
 
-# ── Total deviation EDF (SP1065 §§5.11–5.13) ─────────────────────────────────
+# ── Total deviation EDF (SP1065 §§5.2.11–5.2.13) ─────────────────────────────
 
 """
     totaldev_edf(var_type, alpha, T, tau) → Float64
@@ -211,7 +212,7 @@ function _kn_from_alpha(alpha::Int)
     return 1.10   # conservative fallback
 end
 
-# ── Bias correction (SP1065 §§5.11–5.13) ────────────────────────────────────
+# ── Bias correction (SP1065 §§5.2.11–5.2.13) ────────────────────────────────
 
 """
     bias_correction(alpha, var_type, tau, T) → Vector{Float64}
@@ -248,15 +249,22 @@ function bias_correction(alpha::Union{Int,Vector{Int}},
         # SP1065 Table 11
         table = Dict(2=>1.06, 1=>1.17, 0=>1.27, -1=>1.30, -2=>1.31)
         for k in 1:L
-            B[k] = get(table, alpha_v[k], 1.0)
+            a = clamp(alpha_v[k], -2, 2)
+            if a != alpha_v[k]
+                @warn "bias_correction: alpha=$(alpha_v[k]) out of MTOT bounds [-2..2]. Clamping."
+            end
+            B[k] = get(table, a, 1.0)
         end
 
     elseif vt == "htot"
         # FCS 2001 Table 1: correction a(α), B = 1/(1+a)
         table = Dict(0=>-0.005, -1=>-0.149, -2=>-0.229, -3=>-0.283, -4=>-0.321)
         for k in 1:L
-            a = get(table, alpha_v[k], 0.0)
-            B[k] = 1 / (1 + a)
+            a = clamp(alpha_v[k], -4, 0)
+            if a != alpha_v[k]
+                @warn "bias_correction: alpha=$(alpha_v[k]) out of HTOT bounds [-4..0]. Clamping."
+            end
+            B[k] = 1 / (1 + get(table, a, 0.0))
         end
 
     else
@@ -290,13 +298,14 @@ function compute_ci(result::DeviationResult; confidence::Real = result.confidenc
             continue
         end
         ef = edf[k]
-        if isfinite(ef) && ef > 0
+        if isfinite(ef) && ef >= 1.0
             # Chi-squared CI: dev·√(edf/χ²_{1-a/2}) to dev·√(edf/χ²_{a/2})
             chi_lo = chisqinvcdf(ef, a_half)
             chi_hi = chisqinvcdf(ef, 1 - a_half)
             ci[k, 1] = d * sqrt(ef / chi_hi)
             ci[k, 2] = d * sqrt(ef / chi_lo)
         else
+            # Gaussian fallback for ef < 1 or ef is NaN (SP1065 §A.3)
             Kn   = _kn_from_alpha(result.alpha[k])
             half = Kn * d * z / sqrt(Float64(result.N))
             ci[k, 1] = d - half

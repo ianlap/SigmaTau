@@ -137,26 +137,24 @@ Calls `mhdev`, then scales by `sqrt(tau^2 / 6)`.
 
 ### TOTDEV — Total deviation
 
-**Formula** (SP1065 §5.11, Eq. 26):
+**Formula** (SP1065 §5.2.11, Eq. 25 — phase form):
 
-Data extended by symmetric reflection at both ends, then overlapping AVAR applied
-to extended sequence.
+Data extended by symmetric reflection at both ends, then overlapping second
+differences applied to the extended sequence.
 
 ```
-TOTVAR(τ) = 1 / (2(N-1)(mτ₀)²) · Σᵢ (x*[i+2m] - 2x*[i+m] + x*[i])²
+TOTVAR(τ) = 1 / (2τ²(N-2)) · Σᵢ₌₂ᴺ⁻¹ (x*[i-m] - 2x*[i] + x*[i+m])²
 ```
 
-where `x*` is the reflected-extended sequence and sum is over `i = 1 … N-2` (using
-original-index positions in the extended array).
+where `x*` is the reflected-extended sequence of length `3N-4` and τ = m·τ₀.
+Frequency form (Eq. 26) uses `2(M-1)` with M = N-1; the two forms agree since
+M-1 = N-2.
 
 **Implementation** (`julia/src/deviations.jl:_totdev_kernel`,
 `matlab/+sigmatau/+dev/totdev.m:totdev_kernel`): denominator is
 `2*(N-2)*(m*tau0)^2`.
 
-**Status**: ⚠ **Discrepancy flagged.** SP1065 §5.11 uses `2(N-1)(mτ₀)²`; both
-MATLAB and Julia use `2(N-2)(mτ₀)²`. Source is the legacy codebase; needs
-verification against SP1065 and MB23. Until resolved, cross-validate against a
-known-good reference implementation (e.g., Stable32 or NIST TimeLab).
+**Status**: ✓ Verified against SP1065 Eq. 25 (2026-04-14).
 
 ---
 
@@ -349,9 +347,8 @@ x_pred[2] += steer        # frequency correction
 
 | # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 1 | `totdev` kernel | Denominator `2(N-2)(mτ₀)²` — SP1065 §5.11 specifies `2(N-1)(mτ₀)²` | ⚠ Unresolved — needs verification against SP1065 and reference implementation |
-| 2 | MDEV | MB23 Eq. 4.4.3.2 omits `1/m` normalization factor inside brackets | ✓ Code is correct (matches SP1065 Eq. 16); book has a typo |
-| 3 | `htotdev` bias correction | Multiply vs. divide direction not confirmed | ⚠ Verify against SP1065 bias table and Julia output |
-| 4 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
-| 5 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
-| 6 | MATLAB KF | `matlab/+sigmatau/+kf/` is empty — no MATLAB Kalman filter implementation | ⚠ Not yet ported from Julia |
+| 1 | MDEV | MB23 Eq. 4.4.3.2 omits `1/m` normalization factor inside brackets | ✓ Code is correct (matches SP1065 Eq. 16); book has a typo |
+| 2 | `htotdev` bias correction | Multiply vs. divide direction not confirmed | ⚠ Verify against SP1065 bias table and Julia output |
+| 3 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
+| 4 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
+| 5 | MATLAB KF | `matlab/+sigmatau/+kf/` is empty — no MATLAB Kalman filter implementation | ⚠ Not yet ported from Julia |

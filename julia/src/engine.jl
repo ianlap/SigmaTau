@@ -46,7 +46,8 @@ function engine(
     tau0 = validate_tau0(tau0)
     N    = length(x)
 
-    ms   = Vector{Int}(something(m_list, _default_mlist(N, params.min_factor)))
+    ms = Vector{Int}(something(m_list, _default_mlist(N, params.min_factor)))
+    filter!(m -> m >= 1, ms)   # Step 5: Filter invalid averaging factors
     isempty(ms) && return _empty_result(params.name, tau0, N)
 
     # Noise identification (returns Float64 vector; NaN where it fails)
@@ -69,7 +70,14 @@ function engine(
             continue
         end
 
-        dev[k]  = sqrt(max(var_val, 0.0))   # guard against fp rounding below zero
+        # Step 1: Guard against negative variance from catastrophic cancellation.
+        # Small negative values (rounding) are clamped to 0; significant negatives → NaN.
+        # Threshold: -eps * N (scale of sum operations).
+        if var_val < -eps() * N
+            dev[k] = NaN
+        else
+            dev[k] = sqrt(max(var_val, 0.0))
+        end
         neff[k] = n
 
         # EDF computation

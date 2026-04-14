@@ -47,24 +47,38 @@ for k = 1:L
         continue;
     end
     ef = edf_vec(k);
-    if isfinite(ef) && ef > 0 && have_chi2
-        % Chi-squared CI: dev * sqrt(edf / chi2_{alpha/2}) to sqrt(edf / chi2_{1-alpha/2})
-        a_chi = 1 - confidence;
-        chi_lo = chi2inv(a_chi / 2,       ef);
-        chi_hi = chi2inv(1 - a_chi / 2,   ef);
-        ci_mat(k, 1) = d * sqrt(ef / chi_hi);
-        ci_mat(k, 2) = d * sqrt(ef / chi_lo);
+    if isfinite(ef) && ef >= 1
+        if have_chi2
+            % Chi-squared CI: dev * sqrt(edf / chi2_{alpha/2}) to sqrt(edf / chi2_{1-alpha/2})
+            a_chi = 1 - confidence;
+            chi_lo = chi2inv(a_chi / 2,       ef);
+            chi_hi = chi2inv(1 - a_chi / 2,   ef);
+            ci_mat(k, 1) = d * sqrt(ef / chi_hi);
+            ci_mat(k, 2) = d * sqrt(ef / chi_lo);
+        else
+            persistent warned_chi2;
+            if isempty(warned_chi2)
+                warning('sigmatau:stats:ci:NoToolbox', ...
+                    'Statistics Toolbox (chi2inv) not found. Falling back to Gaussian approximation for CI.');
+                warned_chi2 = true;
+            end
+            ci_mat(k, :) = gaussian_fallback(d, alph(k), z, N);
+        end
     else
         % Gaussian fallback: ±Kn * dev * z / sqrt(N)
-        Kn = kn_from_alpha(alph(k));
-        half = Kn * d * z / sqrt(N);
-        ci_mat(k, 1) = d - half;
-        ci_mat(k, 2) = d + half;
+        ci_mat(k, :) = gaussian_fallback(d, alph(k), z, N);
     end
 end
 end
 
 % ── Helpers ───────────────────────────────────────────────────────────────────
+
+function ci = gaussian_fallback(d, alpha, z, N)
+% Gaussian fallback: ±Kn * dev * z / sqrt(N)
+Kn = kn_from_alpha(alpha);
+half = Kn * d * z / sqrt(N);
+ci = [d - half, d + half];
+end
 
 function z = z_from_confidence(confidence, have_norminv)
 % Two-sided normal quantile. Statistics Toolbox norminv when available

@@ -304,7 +304,7 @@ end
     totdev(x, tau0; m_list=nothing, data_type=:phase) → DeviationResult
 
 Total deviation. Extends data by symmetric reflection to reduce endpoint effects,
-then computes overlapping second differences. SP1065 §5.11.
+then computes overlapping second differences. SP1065 §5.2.11 Eq. 25.
 
 Algorithm: linear detrend, build 3N-4 extended array by symmetric reflection
 about each endpoint, compute second differences at all N center positions.
@@ -336,7 +336,7 @@ function totdev(
 end
 
 # Kernel: linear detrend + symmetric reflection, then overlapping second differences.
-# SP1065 §5.11: denominator uses (N-2) not the number of overlap samples.
+# SP1065 §5.2.11 Eq. 25: phase-form denominator is 2τ²(N-2), not the number of overlap samples.
 function _totdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
     N = length(x)
     xd = detrend_linear(x)
@@ -354,7 +354,7 @@ function _totdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
         D += d2^2; count += 1
     end
     count == 0 && return (NaN, 0)
-    # SP1065 denominator uses (N-2), not count
+    # SP1065 §5.2.11 Eq. 25: phase form uses 2τ²(N-2)
     var = D / (2 * (N - 2) * (m * tau0)^2)
     return (var, count)
 end
@@ -606,6 +606,7 @@ end
 # Kernel: linear detrend per phase segment, symmetric reflection, third diffs + moving avg.
 # Ported from legacy mhtotdev. Variance = total_sum / (nsubs * (m*tau0)^2).
 function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
+    m >= 1 || throw(ArgumentError("averaging factor m must be >= 1"))
     N = length(x)
     nsubs = N - 4m + 1
     nsubs < 1 && return (NaN, 0)

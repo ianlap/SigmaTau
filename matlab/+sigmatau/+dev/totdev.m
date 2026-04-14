@@ -6,7 +6,7 @@ function result = totdev(x, tau0, m_list, varargin)
 %   result = sigmatau.dev.totdev(x, tau0, m_list, 'data_type', 'freq')
 %
 %   Extends data by symmetric reflection to reduce endpoint effects, then
-%   computes overlapping second differences. SP1065 §5.11.
+%   computes overlapping second differences. SP1065 §5.2.11 Eq. 25.
 %
 %   Algorithm: linear detrend, build 3N-4 extended array by symmetric
 %   reflection about each endpoint, compute second differences at all N
@@ -28,7 +28,7 @@ end
 
 function [v, neff] = totdev_kernel(x, m, tau0)
 % Linear detrend + symmetric reflection, then overlapping second differences.
-% SP1065 §5.11: denominator uses (N-2).
+% SP1065 §5.2.11 Eq. 25: denominator uses 2τ²(N-2) for phase form.
 N  = numel(x);
 xd = sigmatau.util.detrend(x, 1);
 % Symmetric reflection about each endpoint
@@ -51,7 +51,8 @@ if count == 0
     v = NaN; neff = 0;
     return;
 end
-% SP1065 denominator uses (N-2), not count
+% SP1065 §5.2.11 Eq. 25: phase form uses 2τ²(N-2)
 v    = D / (2 * (N-2) * (m*tau0)^2);
 neff = count;
 end
+

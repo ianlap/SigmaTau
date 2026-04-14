@@ -25,7 +25,7 @@ Every refactored function must produce identical numerical output to the legacy 
   - Greenhall & Riley, "Uncertainty of Stability Variances," PTTI 2003
   - IEEE Std 1139-2022
 - **Legacy Components**: Read from `matlab/legacy/` and `julia/legacy_stablab/`.
-- **Known Bugs**: Verify htotdev bias direction, htotdev EDF loop indexing, and mhtotdev Neff formula against Riley (2001).
+- **Known Bugs**: Verify htotdev bias direction, htotdev EDF loop indexing, and mhtotdev Neff formula against Riley (2001). totdev denominator verified 2026-04-14: SP1065 Eq. 25 uses 2τ²(N-2) for phase form (equivalently 2(M-1) for frequency form, M=N-1) — do not change.
 
 ## Maintenance Tasks
 - [ ] Delete `mhdev_noID.m` — dead code.

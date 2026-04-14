@@ -24,6 +24,7 @@ end
 
 function [v, neff] = mhtotdev_kernel(x, m, tau0)
 % Linear detrend per phase segment, symmetric reflection, third diffs + moving avg.
+assert(m >= 1, 'SigmaTau:mhtotdev', 'averaging factor m must be >= 1');
 N     = numel(x);
 nsubs = N - 4*m + 1;
 if nsubs < 1

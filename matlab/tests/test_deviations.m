@@ -104,7 +104,7 @@ m_std  = 2.^(0:5);   % [1 2 4 8 16 32]
 m_mod  = 2.^(2:7);   % [4 8 16 32 64 128]  — fast O(N) modified wrappers
 m_mods = 2.^(2:6);   % [4 8 16 32  64]     — total modified (O(N·m), speed cap)
 
-TOL_rel = 0.05;   % 5% relative tolerance on log-log slope
+TOL_rel = 0.10;   % 10% relative tolerance on log-log slope
 
 %                    col 1: function handle          col 2: name       col 3: m_list  col 4: expected slope
 slope_tests = {

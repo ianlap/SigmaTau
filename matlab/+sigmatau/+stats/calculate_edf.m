@@ -11,12 +11,14 @@ function edf = calculate_edf(alpha, d, m, F, S, N)
 %     S     – stride (1 overlapping, m non-overlapping)
 %     N     – number of phase data points
 %
-%   Reference: Greenhall & Riley, PTTI 2003, Eq. 4–10.
+% Reference: Greenhall & Riley, PTTI 2003, Eq. 4–10.
 
+% Convergent boundary: 2d + alpha > 1 (Greenhall & Riley 2003, Eq. 4)
 if alpha + 2*d <= 1
     edf = NaN;
     return;
 end
+
 
 L = m/F + m*d;          % filter length
 if N < L

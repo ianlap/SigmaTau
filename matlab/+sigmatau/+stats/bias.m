@@ -12,7 +12,7 @@ function B = bias(alpha, var_type, tau, T)
 %   Output:
 %     B – bias factor for each tau. Divide deviation by B for unbiased estimate.
 %
-%   Reference: SP1065 §§5.11–5.13; FCS 2001 Table 1.
+%   Reference: SP1065 §§5.2.11–5.2.13; FCS 2001 Table 1.
 
 % SP1065 Table 11 — MTOT bias factors, indexed by alpha ∈ {-2,-1,0,1,2}
 MTOT_B = [1.31, 1.30, 1.27, 1.17, 1.06];
@@ -39,18 +39,26 @@ switch lower(var_type)
 
     case 'mtot'
         for k = 1:numel(alpha)
-            idx = round(alpha(k)) + 3;   % alpha ∈ {-2..2} → idx ∈ {1..5}
-            if idx >= 1 && idx <= numel(MTOT_B)
-                B(k) = MTOT_B(idx);
+            a_round = round(alpha(k));
+            if a_round < -2 || a_round > 2
+                warning('sigmatau:stats:bias:OutOfBounds', ...
+                        'alpha=%g out of MTOT bounds [-2..2]. Clamping.', a_round);
+                a_round = max(-2, min(2, a_round));
             end
+            idx = a_round + 3;   % alpha ∈ {-2..2} → idx ∈ {1..5}
+            B(k) = MTOT_B(idx);
         end
 
     case 'htot'
         for k = 1:numel(alpha)
-            idx = round(alpha(k)) + 5;   % alpha ∈ {-4..0} → idx ∈ {1..5}
-            if idx >= 1 && idx <= numel(HTOT_A)
-                B(k) = 1 / (1 + HTOT_A(idx));
+            a_round = round(alpha(k));
+            if a_round < -4 || a_round > 0
+                warning('sigmatau:stats:bias:OutOfBounds', ...
+                        'alpha=%g out of HTOT bounds [-4..0]. Clamping.', a_round);
+                a_round = max(-4, min(0, a_round));
             end
+            idx = a_round + 5;   % alpha ∈ {-4..0} → idx ∈ {1..5}
+            B(k) = 1 / (1 + HTOT_A(idx));
         end
 
     otherwise
