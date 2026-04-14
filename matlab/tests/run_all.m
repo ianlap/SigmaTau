@@ -12,6 +12,7 @@ tests = {
     'test_noise_slopes',
     'test_freq_input',
     'test_crossval_julia',
+    'test_filter',
 };
 
 passed = 0;

@@ -348,4 +348,4 @@ x_pred[2] += steer        # frequency correction
 | 1 | MDEV | MB23 Eq. 4.4.3.2 omits `1/m` normalization factor inside brackets | ✓ Code is correct (matches SP1065 Eq. 16); book has a typo |
 | 2 | `htotdev` EDF loop | CLAUDE.md flags potential off-by-one: loop over `numel(tau)` vs `numel(valid)` after trimming | ⚠ Not audited in this pass |
 | 3 | `mhtotdev` Neff | CLAUDE.md flags: is segment count `N-4m+1` or `N-3m`? | ✓ Both MATLAB and Julia use `N-4m+1`; consistent with FCS 2001 |
-| 4 | MATLAB KF | `matlab/+sigmatau/+kf/` is empty — no MATLAB Kalman filter implementation | ⚠ Not yet ported from Julia |
+| 4 | MATLAB KF | `matlab/+sigmatau/+kf/` implementation available. | ✓ Ported from Julia |
