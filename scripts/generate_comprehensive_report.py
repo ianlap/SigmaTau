@@ -39,19 +39,77 @@ def get_sigmatau_results(phase_data, tau0, m_list):
     dev_funcs = [:adev, :mdev, :hdev, :mhdev, :tdev, :totdev, :mtotdev, :htotdev, :mhtotdev, :ldev]
     
     # Header
-    println("func,m,tau,sigma,ci_lo,ci_hi")
+    println("func,m,tau,sigma,ci_lo,ci_hi,sigma_unbiased,ci_lo_unbiased,ci_hi_unbiased")
     
     for f in dev_funcs
         res = getfield(SigmaTau, f)(x, tau0; m_list=m_list)
+        
+        # Calculate unbiased results for totdev, mtotdev, and htotdev
+        # Stable32 doesn't apply bias correction for these.
+        
+        res_unbiased = res
+        fname = string(f)
+        if fname in ["totdev", "mtotdev", "htotdev"]
+             T_rec = (res.N - 1) * res.tau0
+             # Map function name to bias type
+             bias_type = fname == "totdev" ? "totvar" : 
+                         fname == "mtotdev" ? "mtot" : "htot"
+             
+             B = SigmaTau.bias_correction(res.alpha, bias_type, res.tau, T_rec)
+             
+             # sigma_unbiased = SigmaTau_sigma * B if SigmaTau_sigma is biased.
+             # In SigmaTau engine, totdev and htotdev ARE biased. mtotdev is NOT.
+             
+             raw_sigma = res.deviation
+             if fname in ["totdev", "htotdev"]
+                raw_sigma = res.deviation .* B
+             end
+             
+             # If mtotdev is already unbiased in SigmaTau, then raw_sigma = res.deviation.
+             # But if we want to show a "Biased" vs "Unbiased" for mtotdev too, 
+             # we should calculate what the biased version would be.
+             
+             sigma_biased = res.deviation
+             if fname == "mtotdev"
+                sigma_biased = res.deviation ./ B
+             end
+             
+             # Recompute CI for raw sigma
+             res_tmp = SigmaTau.DeviationResult(
+                 res.tau, raw_sigma, res.edf, res.ci,
+                 res.alpha, res.neff, res.tau0, res.N, res.method, res.confidence
+             )
+             res_unbiased = SigmaTau.compute_ci(res_tmp)
+             
+             # We want the 'res' to hold the biased version and 'res_unbiased' to hold the unbiased one.
+             if fname == "mtotdev"
+                 # Overwrite res with a biased version for the report table
+                 res_tmp_biased = SigmaTau.DeviationResult(
+                     res.tau, sigma_biased, res.edf, res.ci,
+                     res.alpha, res.neff, res.tau0, res.N, res.method, res.confidence
+                 )
+                 res = SigmaTau.compute_ci(res_tmp_biased)
+             end
+        end
+
         for i in 1:length(res.tau)
             # res.ci is a Matrix size (L, 2)
             lo = res.ci[i, 1]
             hi = res.ci[i, 2]
             ci_lo = isnan(lo) ? "NaN" : string(lo)
             ci_hi = isnan(hi) ? "NaN" : string(hi)
+            
+            # Unbiased values
+            sig_unb = res_unbiased.deviation[i]
+            lo_unb = res_unbiased.ci[i, 1]
+            hi_unb = res_unbiased.ci[i, 2]
+            
+            ci_lo_unb = isnan(lo_unb) ? "NaN" : string(lo_unb)
+            ci_hi_unb = isnan(hi_unb) ? "NaN" : string(hi_unb)
+            
             # Calculate m from tau and tau0
             m_val = round(Int, res.tau[i] / res.tau0)
-            println(string(f), ",", m_val, ",", res.tau[i], ",", res.deviation[i], ",", ci_lo, ",", ci_hi)
+            println(string(f), ",", m_val, ",", res.tau[i], ",", res.deviation[i], ",", ci_lo, ",", ci_hi, ",", sig_unb, ",", ci_lo_unb, ",", ci_hi_unb)
         end
     end
     """
@@ -63,10 +121,6 @@ def get_sigmatau_results(phase_data, tau0, m_list):
     
     if stderr:
         print(f"Julia Error: {stderr}")
-    
-    print(f"DEBUG: Julia stdout length: {len(stdout)}")
-    if len(stdout) < 200:
-        print(f"DEBUG: Julia stdout content: {stdout}")
         
     os.remove("tmp_phase.txt")
     
@@ -77,17 +131,9 @@ def get_sigmatau_results(phase_data, tau0, m_list):
     # Parse CSV output
     from io import StringIO
     try:
-        # Check if we have more than just the header
-        lines = stdout.strip().split('\n')
-        if len(lines) <= 1:
-            print("Julia returned only header or nothing")
-            return {}
-            
         df = pd.read_csv(StringIO(stdout))
     except Exception as e:
         print(f"Failed to parse Julia CSV: {e}")
-        print("Raw output:")
-        print(stdout)
         return {}
     
     results = {}
@@ -97,7 +143,10 @@ def get_sigmatau_results(phase_data, tau0, m_list):
             "tau": func_df['tau'].tolist(),
             "sigma": func_df['sigma'].tolist(),
             "ci_lo": func_df['ci_lo'].tolist(),
-            "ci_hi": func_df['ci_hi'].tolist()
+            "ci_hi": func_df['ci_hi'].tolist(),
+            "sigma_unbiased": func_df['sigma_unbiased'].tolist(),
+            "ci_lo_unbiased": func_df['ci_lo_unbiased'].tolist(),
+            "ci_hi_unbiased": func_df['ci_hi_unbiased'].tolist()
         }
     return results
 
@@ -138,13 +187,10 @@ def main():
         print(f"Processing {s32_type}...")
         
         # Compute with allantools
-        # Filter for the specific taus in this subset
         target_taus = sorted(s32_subset['Tau'].unique())
         try:
             func = getattr(at, at_func)
-            # PASS THE TARGET TAUS EXPLICITLY TO MATCH STABLE32
             at_taus, at_sigma, at_err, at_n = func(x, rate=1.0/tau0, data_type="phase", taus=target_taus)
-            # Create a map for easy lookup
             at_map = dict(zip(at_taus, at_sigma))
         except Exception as e:
             at_map = {}
@@ -152,41 +198,35 @@ def main():
             
         # Get SigmaTau results
         st_data = st_results.get(st_func, {})
-        st_sigma_list = st_data.get("sigma", [])
         st_tau_list = st_data.get("tau", [])
-        st_ci_lo_list = st_data.get("ci_lo", [])
-        st_ci_hi_list = st_data.get("ci_hi", [])
         
-        st_map = dict(zip(st_tau_list, st_sigma_list))
-        st_ci_lo_map = dict(zip(st_tau_list, st_ci_lo_list))
-        st_ci_hi_map = dict(zip(st_tau_list, st_ci_hi_list))
+        st_map = dict(zip(st_tau_list, st_data.get("sigma", [])))
+        st_ci_lo_map = dict(zip(st_tau_list, st_data.get("ci_lo", [])))
+        st_ci_hi_map = dict(zip(st_tau_list, st_data.get("ci_hi", [])))
+        
+        st_unb_map = dict(zip(st_tau_list, st_data.get("sigma_unbiased", [])))
+        st_ci_lo_unb_map = dict(zip(st_tau_list, st_data.get("ci_lo_unbiased", [])))
+        st_ci_hi_unb_map = dict(zip(st_tau_list, st_data.get("ci_hi_unbiased", [])))
         
         for i, row in s32_subset.iterrows():
-            m = int(row['AF'])
             tau = float(row['Tau'])
-            s32_sigma = float(row['Sigma'])
-            s32_ci_lo = float(row['MinSigma']) if row['MinSigma'] else None
-            s32_ci_hi = float(row['MaxSigma']) if row['MaxSigma'] else None
-            
-            at_val = at_map.get(tau)
-            st_val = st_map.get(tau)
             
             report.append({
                 "Type": s32_type,
-                "m": m,
+                "m": int(row['AF']),
                 "Tau": tau,
-                "Stable32": s32_sigma,
-                "allantools": at_val,
-                "SigmaTau": st_val,
-                "S32_CI_Lo": s32_ci_lo,
-                "S32_CI_Hi": s32_ci_hi,
+                "Stable32": float(row['Sigma']),
+                "allantools": at_map.get(tau),
+                "SigmaTau": st_map.get(tau),
+                "SigmaTau_Unbiased": st_unb_map.get(tau),
+                "S32_CI_Lo": float(row['MinSigma']) if row['MinSigma'] else None,
+                "S32_CI_Hi": float(row['MaxSigma']) if row['MaxSigma'] else None,
                 "ST_CI_Lo": st_ci_lo_map.get(tau),
                 "ST_CI_Hi": st_ci_hi_map.get(tau),
+                "ST_CI_Lo_Unbiased": st_ci_lo_unb_map.get(tau),
+                "ST_CI_Hi_Unbiased": st_ci_hi_unb_map.get(tau),
             })
             
-    # Also add types only in SigmaTau/allantools
-    # e.g., mhdev, ldev, mhtotdev
-    
     report_df = pd.DataFrame(report)
     report_df.to_csv("reference/stable32out/comprehensive_comparison.csv", index=False)
     
@@ -198,15 +238,29 @@ def main():
             f.write(f"## {s32_type}\n\n")
             subset = report_df[report_df['Type'] == s32_type]
             
+            is_total = s32_type in ["Total", "Modified Total", "Hadamard Total"]
+            
             # Create a nice table
-            f.write("| Tau | Stable32 | allantools | SigmaTau | S32 CI | ST CI |\n")
-            f.write("|:---|:---|:---|:---|:---|:---|\n")
+            if is_total:
+                f.write("| Tau | Stable32 | SigmaTau (Biased) | SigmaTau (Unbiased) | S32 CI | ST CI (Unbiased) |\n")
+                f.write("|:---|:---|:---|:---|:---|:---|\n")
+            else:
+                f.write("| Tau | Stable32 | allantools | SigmaTau | S32 CI | ST CI |\n")
+                f.write("|:---|:---|:---|:---|:---|:---|\n")
+                
             for _, row in subset.iterrows():
                 s32_ci = f"[{row['S32_CI_Lo']:.2e}, {row['S32_CI_Hi']:.2e}]" if not np.isnan(row['S32_CI_Lo']) else "N/A"
-                st_ci = f"[{row['ST_CI_Lo']:.2e}, {row['ST_CI_Hi']:.2e}]" if row['ST_CI_Lo'] is not None and not np.isnan(row['ST_CI_Lo']) else "N/A"
-                st_val = f"{row['SigmaTau']:.5e}" if row['SigmaTau'] is not None and not np.isnan(row['SigmaTau']) else "N/A"
-                at_val = f"{row['allantools']:.5e}" if row['allantools'] is not None and not np.isnan(row['allantools']) else "N/A"
-                f.write(f"| {row['Tau']:.1e} | {row['Stable32']:.5e} | {at_val} | {st_val} | {s32_ci} | {st_ci} |\n")
+                
+                if is_total:
+                    st_ci_unb = f"[{row['ST_CI_Lo_Unbiased']:.2e}, {row['ST_CI_Hi_Unbiased']:.2e}]" if row['ST_CI_Lo_Unbiased'] is not None and not np.isnan(row['ST_CI_Lo_Unbiased']) else "N/A"
+                    st_biased = f"{row['SigmaTau']:.5e}" if row['SigmaTau'] is not None and not np.isnan(row['SigmaTau']) else "N/A"
+                    st_unbiased = f"{row['SigmaTau_Unbiased']:.5e}" if row['SigmaTau_Unbiased'] is not None and not np.isnan(row['SigmaTau_Unbiased']) else "N/A"
+                    f.write(f"| {row['Tau']:.1e} | {row['Stable32']:.5e} | {st_biased} | {st_unbiased} | {s32_ci} | {st_ci_unb} |\n")
+                else:
+                    st_ci = f"[{row['ST_CI_Lo']:.2e}, {row['ST_CI_Hi']:.2e}]" if row['ST_CI_Lo'] is not None and not np.isnan(row['ST_CI_Lo']) else "N/A"
+                    st_val = f"{row['SigmaTau']:.5e}" if row['SigmaTau'] is not None and not np.isnan(row['SigmaTau']) else "N/A"
+                    at_val = f"{row['allantools']:.5e}" if row['allantools'] is not None and not np.isnan(row['allantools']) else "N/A"
+                    f.write(f"| {row['Tau']:.1e} | {row['Stable32']:.5e} | {at_val} | {st_val} | {s32_ci} | {st_ci} |\n")
             f.write("\n")
 
 if __name__ == "__main__":
