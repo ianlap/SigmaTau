@@ -1,0 +1,25 @@
+name = "SigmaTauCLI"
+uuid = "03c35b2b-111e-4967-8c1c-555708c5eb0f"
+authors = ["Ian Lapinski <ian.lapinski.99@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+SigmaTau = "a3b4c5d6-e7f8-4321-abcd-1234567890ab"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
+
+[sources]
+SigmaTau = {path = "../.."}
+
+[compat]
+julia = "1.9"
+
+[extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "Random"]
