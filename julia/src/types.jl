@@ -44,22 +44,19 @@ Each deviation wrapper creates one of these; the engine is parameterised by it.
 - `F_fn::Function`: m → F filter factor (identity `m` for unmodified, `1` for modified)
 - `dmin::Int`: Minimum differencing depth for noise_id
 - `dmax::Int`: Maximum differencing depth for noise_id
-- `is_total::Bool`: Use totaldev_edf (true) or calculate_edf (false)
-- `total_type::String`: Arg for totaldev_edf ("totvar","mtot","htot","mhtot"; ignored if !is_total)
-- `needs_bias::Bool`: Apply bias correction to output variance
-- `bias_type::String`: Arg for bias_correction ("totvar","mtot","htot"; ignored if !needs_bias)
+- Total-deviation EDF and bias behavior are inferred from `name` in the engine.
 
 # Deviation quick reference (from SP1065)
-| dev      | d | min_factor | F_fn   | is_total | needs_bias |
-|----------|---|------------|--------|----------|------------|
-| adev     | 2 | 2          | m->m   | false    | false      |
-| mdev     | 2 | 3          | m->1   | false    | false      |
-| hdev     | 3 | 4          | m->m   | false    | false      |
-| mhdev    | 3 | 4          | m->1   | false    | false      |
-| totdev   | 2 | 2          | m->m   | true     | true       |
-| mtotdev  | 2 | 3          | m->1   | true     | false      |
-| htotdev  | 3 | 3          | m->m   | true     | true       |
-| mhtotdev | 3 | 4          | m->1   | true     | false      |
+| dev      | d | min_factor | F_fn |
+|----------|---|------------|------|
+| adev     | 2 | 2          | m->m |
+| mdev     | 2 | 3          | m->1 |
+| hdev     | 3 | 4          | m->m |
+| mhdev    | 3 | 4          | m->1 |
+| totdev   | 2 | 2          | m->m |
+| mtotdev  | 2 | 3          | m->1 |
+| htotdev  | 3 | 3          | m->m |
+| mhtotdev | 3 | 4          | m->1 |
 """
 struct DevParams
     name::String
@@ -68,10 +65,6 @@ struct DevParams
     F_fn::Function
     dmin::Int
     dmax::Int
-    is_total::Bool
-    total_type::String
-    needs_bias::Bool
-    bias_type::String
 end
 
 # ── Private utilities ─────────────────────────────────────────────────────────

@@ -74,7 +74,7 @@
         rht = htotdev(x, tau0; m_list=[1])
         @test !isempty(rh.deviation)
         @test !isempty(rht.deviation)
-        # Allow for small bias correction applied by engine (htotdev needs_bias=true)
+        # Allow for small bias correction applied by engine (derived from method name)
         @test isapprox(rht.deviation[1], rh.deviation[1]; rtol=0.01)
     end
 

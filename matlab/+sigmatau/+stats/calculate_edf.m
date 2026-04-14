@@ -70,6 +70,10 @@ end
 end
 
 function sz = compute_sz(t, F, alpha, d)
+% Sz = (-1)^d · ∇^{2d} Sx where ∇^{2d} are central differences
+% (squared d-th difference operator). Weights are rows of Pascal's triangle
+% squared: d=1 → (2,-1,-1); d=2 → (6,-4,-4,1,1); d=3 → (20,-15,-15,6,6,-1,-1).
+% Greenhall & Riley (2003) Eq. 8.
 switch d
     case 1
         sz = 2*compute_sx(t,F,alpha) - compute_sx(t-1,F,alpha) - compute_sx(t+1,F,alpha);
