@@ -23,6 +23,7 @@ export DeviationResult, DevParams
 export engine
 export compute_ci, bias_correction, edf_for_result
 export noise_id
+export mhdev_fit, MHDevFitResult, MHDevFitRegion
 export validate_phase_data, validate_tau0
 export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
@@ -40,6 +41,7 @@ include("noise.jl")      # noise_id and supporting functions
 include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
+include("noise_fit.jl")  # mhdev_fit (port of legacy kflab/mhdev_fit.m)
 include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
 include("predict.jl")    # PredictConfig, PredictResult, kf_predict
 include("optimize.jl")   # OptimizeConfig, OptimizeResult, optimize_kf
