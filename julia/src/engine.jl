@@ -119,6 +119,7 @@ end
 
 function _bias_type_for_name(name::String)
     name == "totdev" && return "totvar"
+    name == "mtotdev" && return "mtot"
     name == "htotdev" && return "htot"
     return nothing
 end

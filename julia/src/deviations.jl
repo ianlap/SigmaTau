@@ -454,9 +454,9 @@ function _mtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real)
             cs[j+1] = cs[j] + ext[j]
         end
 
-        # Second differences via cumsum windows: sum over 3m+1 positions
+        # Second differences via cumsum windows: sum over 6m positions
         block_sum = 0.0
-        for j in 0:(6m - 3m)   # j in 0:3m
+        for j in 0:(6m - 1)
             a1 = (cs[j+m+1]  - cs[j+1])   / m
             a2 = (cs[j+2m+1] - cs[j+m+1]) / m
             a3 = (cs[j+3m+1] - cs[j+2m+1]) / m

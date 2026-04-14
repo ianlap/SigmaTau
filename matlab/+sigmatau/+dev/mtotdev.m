@@ -19,7 +19,7 @@ params = struct( ...
     'dmin',       0,         ...
     'dmax',       2,         ...
     'total_type', 'mtot',    ...
-    'bias_type',  ''         ...
+    'bias_type',  'mtot'     ...
 );
 
 result = sigmatau.dev.engine(x, tau0, m_list, @mtotdev_kernel, params, varargin{:});
@@ -42,7 +42,7 @@ outer_sum = 0.0;
 CX      = cumsum([0; x]);
 p_range = (0:seg_len)';
 T2      = p_range .* (p_range - 1) / 2;
-j_range = (0:3*m)';
+j_range = (0:6*m-1)';
 
 for n = 1:nsubs
     % Half-average detrend without slicing
@@ -58,12 +58,12 @@ for n = 1:nsubs
     % SumS_vec(p+1) = sum_{i=1}^p (x(n+i-1) - slope*tau0*(i-1))
     SumS_vec = (CX(n+p_range) - CX(n)) - slope * tau0 * T2;
 
-    % Reflection: cs(1:3m+1) is rev(seq_det), cs(3m+1:6m+1) is seq_det
-    % cs(k+1) = SumS(seg_len) - SumS(seg_len-k) for k=0:seg_len
-    % cs(k+1) = SumS(seg_len) + SumS(k-seg_len) for k=seg_len:2*seg_len
-    cs = [SumS_vec(end) - SumS_vec(end:-1:2); SumS_vec(end) + SumS_vec];
+    % Reflection: 3 parts [rev(seq_det); seq_det; rev(seq_det)]
+    S_end = SumS_vec(end);
+    SR    = S_end - SumS_vec(end:-1:1);
+    cs    = [SR; S_end + SumS_vec(2:end); 2*S_end + SR(2:end)];
 
-    % d2 calculation using cs (length 6m+1)
+    % d2 calculation using cs (length 9m+1)
     a1 = (cs(j_range + m + 1)   - cs(j_range + 1))       / m;
     a2 = (cs(j_range + 2*m + 1) - cs(j_range + m + 1))   / m;
     a3 = (cs(j_range + 3*m + 1) - cs(j_range + 2*m + 1)) / m;

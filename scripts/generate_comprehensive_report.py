@@ -57,22 +57,15 @@ def get_sigmatau_results(phase_data, tau0, m_list):
              
              B = SigmaTau.bias_correction(res.alpha, bias_type, res.tau, T_rec)
              
-             # sigma_unbiased = SigmaTau_sigma * B if SigmaTau_sigma is biased.
-             # In SigmaTau engine, totdev and htotdev ARE biased. mtotdev is NOT.
-             
              raw_sigma = res.deviation
-             if fname in ["totdev", "htotdev"]
+             if fname in ["totdev", "mtotdev", "htotdev"]
                 raw_sigma = res.deviation .* B
              end
              
-             # If mtotdev is already unbiased in SigmaTau, then raw_sigma = res.deviation.
-             # But if we want to show a "Biased" vs "Unbiased" for mtotdev too, 
-             # we should calculate what the biased version would be.
-             
-             sigma_biased = res.deviation
-             if fname == "mtotdev"
-                sigma_biased = res.deviation ./ B
-             end
+             # sigma_biased = res.deviation
+             # We want the 'res' to hold the biased version and 'res_unbiased' to hold the unbiased one.
+             # Since totdev, mtotdev, and htotdev are all biased by default now in SigmaTau.engine,
+             # res already holds the biased version.
              
              # Recompute CI for raw sigma
              res_tmp = SigmaTau.DeviationResult(
@@ -80,16 +73,6 @@ def get_sigmatau_results(phase_data, tau0, m_list):
                  res.alpha, res.neff, res.tau0, res.N, res.method, res.confidence
              )
              res_unbiased = SigmaTau.compute_ci(res_tmp)
-             
-             # We want the 'res' to hold the biased version and 'res_unbiased' to hold the unbiased one.
-             if fname == "mtotdev"
-                 # Overwrite res with a biased version for the report table
-                 res_tmp_biased = SigmaTau.DeviationResult(
-                     res.tau, sigma_biased, res.edf, res.ci,
-                     res.alpha, res.neff, res.tau0, res.N, res.method, res.confidence
-                 )
-                 res = SigmaTau.compute_ci(res_tmp_biased)
-             end
         end
 
         for i in 1:length(res.tau)
