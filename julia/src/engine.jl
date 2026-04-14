@@ -8,7 +8,7 @@ const CONFIDENCE_DEFAULT = 0.683   # 1σ (68.3%) — SP1065 default confidence l
     engine(x, tau0, m_list, kernel, params) → DeviationResult
 
 Shared deviation computation engine.  Each deviation wrapper passes:
-- `kernel(x, m, tau0) → (variance::Float64, neff::Int)` — the core computation.
+- `kernel(x, m, tau0, x_cs) → (variance::Float64, neff::Int)` — the core computation.
   Kernels return **variance**, not deviation; the engine takes the sqrt.
 - `params::DevParams` — configuration (name, m-list and EDF basics)
 
@@ -17,7 +17,8 @@ identification, kernel dispatch, EDF computation, optional bias correction,
 confidence-interval computation, and result construction.
 
 # Kernel contract
-- Input:  full phase vector `x`, averaging factor `m`, sampling interval `tau0`
+- Input:  full phase vector `x`, averaging factor `m`, sampling interval `tau0`,
+  and precomputed prefix sums `x_cs` (length length(x)+1, starting at 0).
 - Output: `(variance, neff)` where `neff` is the effective sample count
 - Return `(NaN, 0)` when there are insufficient samples for this `m`
 

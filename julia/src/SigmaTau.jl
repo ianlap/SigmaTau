@@ -30,7 +30,7 @@ export validate_phase_data, validate_tau0
 export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
 export totdev, mtotdev, htotdev, mhtotdev
-export KalmanConfig, KalmanResult, kalman_filter, safe_sqrt
+export KalmanConfig, KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export PredictConfig, PredictResult, kf_predict
 export OptimizeConfig, OptimizeResult, optimize_kf

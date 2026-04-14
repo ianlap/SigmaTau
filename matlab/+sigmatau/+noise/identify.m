@@ -46,7 +46,11 @@ for k = 1:numel(m_list)
             alpha = identify_b1rn(x_clean, m, data_type);
         end
     catch err
-        warning('SigmaTau:identify', 'Estimation failed for m=%d: %s', m, err.message);
+        if strcmp(err.identifier, 'SigmaTau:identify')
+            warning('SigmaTau:identify', 'Estimation failed for m=%d: %s', m, err.message);
+        else
+            rethrow(err);
+        end
     end
 
     if ~isnan(alpha)

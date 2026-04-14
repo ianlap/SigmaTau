@@ -57,9 +57,13 @@ function cmd_list(session::Session, _::Vector{String}, _flags::Dict)
         println("Results:")
         for (key, r) in session.results
             dsname, dev = key
-            @printf("  %s:%-8s  τ∈[%g, %g], L=%d\n",
-                    dsname, dev,
-                    first(r.tau), last(r.tau), length(r.tau))
+            if isempty(r.tau)
+                @printf("  %s:%-8s  0 points computed\n", dsname, dev)
+            else
+                @printf("  %s:%-8s  τ∈[%g, %g], L=%d\n",
+                        dsname, dev,
+                        first(r.tau), last(r.tau), length(r.tau))
+            end
         end
     end
 end
@@ -103,10 +107,14 @@ function cmd_info(session::Session, positional::Vector{String}, flags::Dict)
         @printf("  method     : %s\n", r.method)
         @printf("  N          : %d\n", r.N)
         @printf("  tau0       : %g\n", r.tau0)
-        @printf("  points     : %d (τ = %g … %g)\n",
-                length(r.tau), first(r.tau), last(r.tau))
-        @printf("  confidence : %.3f\n", r.confidence)
-        print_result_table(r)
+        if isempty(r.tau)
+            println("  points     : 0 computed")
+        else
+            @printf("  points     : %d (τ = %g … %g)\n",
+                    length(r.tau), first(r.tau), last(r.tau))
+            @printf("  confidence : %.3f\n", r.confidence)
+            print_result_table(r)
+        end
     end
 end
 

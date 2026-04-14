@@ -224,7 +224,13 @@ function kalman_filter(data::Vector{Float64}, cfg::KalmanConfig)
         S  = (H * Pm * H')[1, 1] + R
         K  = (Pm * H') / S          # ns×1 matrix
         x  = x + K[:, 1] .* innov
-        P  = Symmetric((I - K * H) * Pm)
+        Pm = (I - K * H) * Pm
+        
+        # Guard diagonal against numerical drift — GEMINI.md §2.2
+        for i in 1:ns
+            Pm[i, i] = safe_sqrt(Pm[i, i])^2
+        end
+        P  = Symmetric(Pm)
 
         # Residual — legacy filter.jl line 135
         resid = phase[k] - x[1]
