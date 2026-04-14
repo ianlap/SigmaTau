@@ -140,11 +140,35 @@ MHVAR(τ) = 1 / (6m⁴τ₀²·N_e) · Σⱼ [Σₖ₌₀^{m-1} (x[j+k+3m] - 3x[
 
 where `N_e = N − 4m + 1` and `τ = mτ₀`.
 
-**Implementation** (`julia/src/deviations.jl:_mhdev_kernel`, `matlab/+sigmatau/+dev/mhdev.m:mhdev_kernel`):
-Cumsum-based; analogous to MDEV but with third-difference kernel. The same `1/m`
-artifact from the prefix-sum formulation appears inside the kernel and is
-absorbed by the `1/(6m²τ₀²·N_e)` outer factor — algebraically equivalent to the
-textbook `1/(6m⁴τ₀²·N_e)` form above.
+**Implementation** (`julia/src/deviations.jl:_mhdev_kernel`,
+`matlab/+sigmatau/+dev/mhdev.m:mhdev_kernel`): Cumsum-based; analogous to MDEV
+but with third-difference kernel:
+
+```julia
+# Prefix sums s of third differences, then sliding window of length m
+d = (s[j+3m] - 3*s[j+2m] + 3*s[j+m] - s[j]) / m   # <-- inner 1/m artifact
+v = sum(abs2, d) / (Ne * 6 * m^2 * tau0^2)
+```
+
+Same `τ = mτ₀` redistribution as MDEV:
+
+```
+  1            1                1                  1
+───────  =  ─────────────  =  ───────────────  =  ──────────    ← SP1065 form
+6m²τ²       6m²(mτ₀)²         6m² · m²τ₀²         6m⁴τ₀²
+```
+
+Let `B_j = Σₖ₌₀^{m−1} (x[j+k+3m] − 3x[j+k+2m] + 3x[j+k+m] − x[j+k])` be the
+unaveraged inner third-difference sum. The kernel computes `d = B_j / m`, then
+divides by `6m²τ₀²`, yielding:
+
+```
+    1              B_j²          B_j²
+─────────  ·  ─────────  =  ─────────────
+6m²τ₀²            m²          6m⁴τ₀²
+```
+
+— identical to the textbook `1/(6m²τ²) · B_j²` form. No numerical disagreement.
 
 **Status**: ✓ Verified structurally. Mirrors MDEV/HDEV relationship.
 
