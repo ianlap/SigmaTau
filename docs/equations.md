@@ -67,11 +67,27 @@ d = (s[j+2m] - 2*s[j+m] + s[j]) / m    # <-- inner 1/m is an algorithmic artifac
 v = sum(abs2, d) / (Ne * 2 * m^2 * tau0^2)
 ```
 
-The `1/m` inside the kernel is **not** part of the textbook formula — it is a
-by-product of the prefix-sum / third-difference formulation (G97). Writing the
-inner sum as an average pulls one factor of `1/m` inside the brackets, which
-becomes `1/m²` after squaring; the outer normalization is therefore reduced from
-`1/(2m⁴τ₀²·N_e)` to `1/(2m²τ₀²·N_e)`. The two forms are algebraically identical.
+The inner `1/m` is **not** part of the textbook formula — it is a by-product of
+the prefix-sum / third-difference formulation (G97). The equivalence is purely
+algebraic, via `τ = mτ₀`:
+
+```
+  1            1                1                  1
+───────  =  ─────────────  =  ───────────────  =  ──────────    ← SP1065 form
+2m²τ²       2m²(mτ₀)²         2m² · m²τ₀²         2m⁴τ₀²
+```
+
+Let `A_j = Σₖ₌₀^{m−1} (x[j+k+2m] − 2x[j+k+m] + x[j+k])` be the unaveraged inner
+sum. The kernel computes `d = A_j / m`, then divides by `2m²τ₀²`, yielding:
+
+```
+    1              A_j²          A_j²
+─────────  ·  ─────────  =  ─────────────
+2m²τ₀²            m²          2m⁴τ₀²
+```
+
+which is identical to the SP1065 prefactor `1/(2m²τ²)` times `A_j²`. Redistribution
+between code and textbook — no numerical disagreement.
 
 **Status**: ✓ Verified. Mathematical check: for white FM noise, MVAR/AVAR → 1/2
 asymptotically.
