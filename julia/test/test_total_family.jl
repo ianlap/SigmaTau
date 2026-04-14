@@ -113,7 +113,8 @@
         y = randn(N)   # fractional-frequency samples
         @test_nowarn totdev(y, tau0; data_type=:freq)
         @test_nowarn mtotdev(y, tau0; data_type=:freq)
-        @test_nowarn htotdev(y, tau0; data_type=:freq)
+        # htotdev triggers alpha clamping warnings for randn input (alpha ≈ 1)
+        @test_logs (:warn, r"bias_correction: alpha=.* out of HTOT bounds") match_mode=:any htotdev(y, tau0; data_type=:freq)
         @test_nowarn mhtotdev(y, tau0; data_type=:freq)
     end
 
