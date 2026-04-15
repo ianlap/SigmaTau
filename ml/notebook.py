@@ -369,3 +369,122 @@ print(f"Ratio MDEV/MHDEV = {imp_mdev / max(imp_mhdev, 1e-12):.3f}")
 # - RF RMSE:             _fill in_
 # - XGB RMSE:            _fill in_
 # - XGB coverage @ 90%:  _fill in_
+
+# %% [markdown]
+# ## 9. Real-data validation — GMR6000 Rb
+#
+# Use the trained RF/XGB to predict process-noise parameters on windows of the
+# real Rb phase record. We generate features via a Julia subprocess (the feature
+# extractor lives in SigmaTau.jl, not Python).
+
+# %%
+import subprocess
+import tempfile
+
+from ml.src.real_data import load_phase_record, extract_windows
+
+REF_FILE = Path("../reference/raw/6k27febunsteered.txt")
+if REF_FILE.exists():
+    ph_feb = load_phase_record(REF_FILE, tau0=1.0, override_unit="nanoseconds")
+    windows = extract_windows(ph_feb, window_size=524_288, n_windows=4)
+    print(f"Extracted {len(windows)} windows of {windows.shape[1]} samples each")
+else:
+    windows = None
+    print(f"Reference file not found at {REF_FILE}; skipping real-data validation.")
+
+# %%
+# Compute features via Julia subprocess (SigmaTau.compute_feature_vector).
+# We pass windows as an HDF5 file and get back a CSV of features.
+# NOTE: h5py writes (n_windows, window_size) in C/row-major order;
+#       Julia HDF5.jl reads column-major, so size() returns (window_size, n_windows).
+F_real = None
+if windows is not None:
+    jl_script = '''
+using Pkg
+Pkg.activate(ARGS[1])
+using SigmaTau
+using HDF5
+# Args: [project_dir, input_h5, output_csv]
+in_path  = ARGS[2]
+out_path = ARGS[3]
+windows = HDF5.h5open(in_path, "r") do f
+    f["windows"][]
+end
+# h5py wrote (n_windows, window_size) C-order; Julia reads column-major → (window_size, n_windows)
+window_size, n_windows = size(windows)
+features = Matrix{Float32}(undef, n_windows, 196)
+Threads.@threads for i in 1:n_windows
+    features[i, :] = Float32.(compute_feature_vector(view(windows, :, i), 1.0))
+end
+open(out_path, "w") do io
+    for i in 1:n_windows
+        for j in 1:196
+            print(io, features[i, j])
+            if j < 196; print(io, ","); end
+        end
+        println(io)
+    end
+end
+'''
+    import h5py
+    jl_project = str((Path("..") / "ml" / "dataset").resolve())
+    with tempfile.TemporaryDirectory() as td:
+        in_h5 = Path(td) / "windows.h5"
+        out_csv = Path(td) / "features.csv"
+        with h5py.File(in_h5, "w") as f:
+            f["windows"] = windows
+        jl_file = Path(td) / "compute_features.jl"
+        jl_file.write_text(jl_script)
+        cmd = ["julia", f"--project={jl_project}", "--threads=auto",
+               str(jl_file), jl_project, str(in_h5), str(out_csv)]
+        print("Running:", " ".join(cmd))
+        subprocess.run(cmd, check=True, capture_output=True)
+        F_real = np.loadtxt(out_csv, delimiter=",").astype(np.float32)
+    print(f"Computed features: {F_real.shape}")
+
+# %%
+if F_real is not None:
+    F_imp = impute_median(F_real)
+    pred_rf  = rf.predict(F_imp)
+    pred_xgb = predict(xgb_m, F_imp)
+    print("RF predictions (log10 q_wpm, q_wfm, q_rwfm) per window:")
+    for i, p in enumerate(pred_rf):
+        print(f"  window {i}: {p}")
+    print("\nXGB predictions:")
+    for i, p in enumerate(pred_xgb):
+        print(f"  window {i}: {p}")
+
+# %%
+# Analytical ADEV from predicted KF q parameters (see ml/dataset/real_data_fit.jl)
+#   σ²_y(τ) ≈ 3·q_wpm/τ²  +  q_wfm/τ  +  q_rwfm·τ · const
+# Here we use the h-based formulation matched to the analytical warm-start:
+#   h_+2 = q_wpm · 2π² / f_h;   σ²_WPM(τ) = 3·f_h·h_+2/(4π²·τ²)
+#   h_0  = 2·q_wfm;             σ²_WFM(τ) = h_0/(2τ)
+#   h_-2 = 3·q_rwfm/(2π²);      σ²_RWFM(τ) = (2π²/3)·h_-2·τ
+def analytical_adev(q_wpm, q_wfm, q_rwfm, tau, f_h=0.5):
+    h_plus2  = q_wpm * 2 * np.pi**2 / f_h
+    h_0      = 2 * q_wfm
+    h_minus2 = 3 * q_rwfm / (2 * np.pi**2)
+    sigma2 = (3 * f_h * h_plus2 / (4 * np.pi**2 * tau**2)
+              + h_0 / (2 * tau)
+              + h_minus2 * (2 * np.pi**2 / 3) * tau)
+    return np.sqrt(np.maximum(sigma2, 0.0))
+
+if F_real is not None:
+    fig, axes = plt.subplots(1, min(4, len(windows)), figsize=(5 * min(4, len(windows)), 5), sharey=True)
+    if len(windows) == 1:
+        axes = [axes]
+    for i, ax in enumerate(axes):
+        sigma_measured = 10.0 ** F_real[i, 0:20]   # first 20 raw features are log10 ADEV
+        ax.loglog(ds.taus, sigma_measured, "o-", label="measured", ms=4)
+        q_pred = 10.0 ** pred_rf[i]
+        sigma_theo = analytical_adev(q_pred[0], q_pred[1], q_pred[2], ds.taus)
+        ax.loglog(ds.taus, sigma_theo, "--", label="RF prediction", lw=2)
+        ax.set_title(f"window {i}")
+        ax.set_xlabel("τ (s)")
+    axes[0].set_ylabel("σ_y(τ)")
+    axes[0].legend()
+    fig.suptitle("Real GMR6000 — measured vs ML-predicted ADEV")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / "real_data_overlay.png", dpi=150)
+    plt.show()
