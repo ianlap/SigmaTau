@@ -239,7 +239,7 @@ function _simple_avar(x::Vector{Float64}, m::Int)
     L = N - 2m
     L <= 0 && return NaN
     d2 = @view(x[1+2m:N]) .- 2 .* @view(x[1+m:N-m]) .+ @view(x[1:L])
-    return _meansq(d2) / (2 * m^2)
+    return _meansq(d2) / (2.0 * Float64(m)^2)
 end
 
 """
@@ -256,5 +256,5 @@ function _simple_mdev(x::Vector{Float64}, m::Int, tau0::Real)
     s2 = @view(cs[1+2m:Ne+2m]) .- @view(cs[1+m:Ne+m])
     s3 = @view(cs[1+3m:Ne+3m]) .- @view(cs[1+2m:Ne+2m])
     d  = (s3 .- 2 .* s2 .+ s1) ./ m
-    return sqrt(_meansq(d) / (2 * m^2 * tau0^2))
+    return sqrt(_meansq(d) / (2.0 * Float64(m)^2 * tau0^2))
 end

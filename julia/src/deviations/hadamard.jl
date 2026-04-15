@@ -48,7 +48,7 @@ function _hdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::Abstr
     L <= 0 && return (NaN, 0)
     d3 = @view(x[1+3m:end]) .- 3 .* @view(x[1+2m:end-m]) .+
          3 .* @view(x[1+m:end-2m]) .- @view(x[1:L])
-    v = sum(abs2, d3) / (L * 6 * m^2 * tau0^2)   # SP1065 HVAR
+    v = sum(abs2, d3) / (L * 6.0 * Float64(m)^2 * tau0^2)   # SP1065 HVAR
     return (v, L)
 end
 
@@ -97,7 +97,7 @@ function _mhdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::Abst
     d = @view(x_cs[1+4m:Ne+4m]) .- 4 .* @view(x_cs[1+3m:Ne+3m]) .+
         6 .* @view(x_cs[1+2m:Ne+2m]) .- 4 .* @view(x_cs[1+m:Ne+m]) .+
         @view(x_cs[1:Ne])
-    v = sum(abs2, d) / (Ne * 6 * m^4 * tau0^2)
+    v = sum(abs2, d) / (Ne * 6.0 * Float64(m)^4 * tau0^2)
     return (v, Ne)
 end
 

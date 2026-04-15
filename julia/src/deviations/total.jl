@@ -369,7 +369,7 @@ function _mhtotdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::A
                 a = S[j+m] - S[j]
                 block_var += a^2
             end
-            block_var /= (n_avg * 6 * m^2)
+            block_var /= (n_avg * 6.0 * Float64(m)^2)
         else
             block_var = 0.0
         end

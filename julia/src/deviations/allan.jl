@@ -43,7 +43,7 @@ function _adev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::Abstr
     L = N - 2m
     L <= 0 && return (NaN, 0)
     d2 = @view(x[1+2m:end]) .- 2 .* @view(x[1+m:end-m]) .+ @view(x[1:L])
-    v  = sum(abs2, d2) / (L * 2 * m^2 * tau0^2)    # SP1065 Eq. 14
+    v  = sum(abs2, d2) / (L * 2.0 * Float64(m)^2 * tau0^2)    # SP1065 Eq. 14
     return (v, L)
 end
 
@@ -94,8 +94,10 @@ function _mdev_kernel(x::AbstractVector{<:Real}, m::Int, tau0::Real, x_cs::Abstr
     # Identity: s3 - 2s2 + s1 = x_cs[i+3m] - 3x_cs[i+2m] + 3x_cs[i+m] - x_cs[i]
     d  = @view(x_cs[1+3m:Ne+3m]) .- 3 .* @view(x_cs[1+2m:Ne+2m]) .+
          3 .* @view(x_cs[1+m:Ne+m]) .- @view(x_cs[1:Ne])
-    # Divide by 2*m^4*tau0^2 because d is Σx_i (unscaled block-sum difference)
-    v  = sum(abs2, d) / (Ne * 2 * m^4 * tau0^2)
+    # Divide by 2*m^4*tau0^2 because d is Σx_i (unscaled block-sum difference).
+    # Float64 promotion on the denominator prevents Int64 overflow for large m·Ne
+    # (e.g. Ne·2·m^4 wraps silently at m≳1e4 with Int64 arithmetic).
+    v  = sum(abs2, d) / (Ne * 2.0 * Float64(m)^4 * tau0^2)
     return (v, Ne)
 end
 
