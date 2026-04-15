@@ -35,6 +35,7 @@ export kf_filter                                   # alias for kalman_filter
 export PredictConfig, PredictResult, kf_predict
 export OptimizeConfig, OptimizeResult, optimize_kf
 export generate_power_law_noise
+export generate_composite_noise
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 

@@ -72,3 +72,29 @@ function generate_power_law_noise(α::Real, h::Real, N::Int, τ₀::Real; seed::
     # Integrate frequency → phase; multiply by τ₀ (discrete integration)
     return cumsum(y_freq) .* τ₀
 end
+
+"""
+    generate_composite_noise(h_coeffs, N, τ₀; seed) → Vector{Float64}
+
+Synthesise composite phase noise by summing independent power-law components.
+
+# Arguments
+- `h_coeffs::AbstractDict{<:Real,<:Real}`: α → h_α mapping.
+- `N`: number of samples (even).
+- `τ₀`: sampling interval (seconds).
+- `seed`: base RNG seed; each component uses seed + offset so streams never collide.
+
+# Returns
+Phase time series `x(t)` in seconds, length N.
+"""
+function generate_composite_noise(h_coeffs::AbstractDict{<:Real,<:Real}, N::Int,
+                                   τ₀::Real; seed::Integer)
+    isempty(h_coeffs) && throw(ArgumentError("h_coeffs must be non-empty"))
+    x = zeros(Float64, N)
+    # Sort α for deterministic seed offset ordering
+    for (offset, α) in enumerate(sort(collect(keys(h_coeffs))))
+        h = h_coeffs[α]
+        x .+= generate_power_law_noise(α, h, N, τ₀; seed = seed + offset - 1)
+    end
+    return x
+end
