@@ -45,6 +45,4 @@ GEMINI.md
 devplans/
 gha-creds-*.json
 .github/commands/gemini-*.toml
-.github/workflows/gemini-*.yml
-.github/workflows/claude*.yml
 reference/validation/stable32out/comprehensive_comparison.csv
