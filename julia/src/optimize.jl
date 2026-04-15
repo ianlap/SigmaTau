@@ -249,6 +249,76 @@ function _build_A(t::Vector{Float64}, ns::Int)
     return A
 end
 
+# ── Static fast-path NLL kernel (nstates == 3) ────────────────────────────────
+
+using StaticArrays: SMatrix, SVector, @SMatrix, @SVector
+
+"""
+    _kf_nll_static(theta, data, cfg) → Float64
+
+Faster NLL kernel for `nstates == 3` using StaticArrays and the scalar-H
+shortcut.  Produces identical results to `_kf_nll` to numerical precision.
+"""
+function _kf_nll_static(theta::Vector{Float64}, data::Vector{Float64},
+                        cfg::OptimizeConfig)::Float64
+    cfg.nstates == 3 || return _kf_nll(theta, data, cfg)
+
+    N = length(data)
+    τ = cfg.tau
+
+    idx = 1
+    R = cfg.q_wpm
+    if cfg.optimize_qwpm
+        R = 10.0^theta[idx]; idx += 1
+    end
+    q_wfm   = 10.0^theta[idx]; idx += 1
+    q_rwfm  = 10.0^theta[idx]; idx += 1
+    q_irwfm = length(theta) >= idx ? 10.0^theta[idx] : 0.0
+
+    # Φ (3×3) and Q (3×3) as static matrices
+    Φ = @SMatrix [1.0  τ     τ^2/2;
+                  0.0  1.0   τ;
+                  0.0  0.0   1.0]
+
+    τ2 = τ^2; τ3 = τ^3; τ4 = τ^4; τ5 = τ^5
+    Q11 = q_wfm*τ + q_rwfm*τ3/3 + q_irwfm*τ5/20
+    Q12 = q_rwfm*τ2/2 + q_irwfm*τ4/8
+    Q13 = q_irwfm*τ3/6
+    Q22 = q_rwfm*τ + q_irwfm*τ3/3
+    Q23 = q_irwfm*τ2/2
+    Q33 = q_irwfm*τ
+    Q   = @SMatrix [Q11 Q12 Q13; Q12 Q22 Q23; Q13 Q23 Q33]
+
+    # LS initialization — hoisted into static form
+    n_fit = max(3, min(_MAX_LS_SAMPLES, N - 1))
+    t_fit = Float64.(0:n_fit-1) .* τ
+    A     = hcat(ones(n_fit), t_fit, t_fit.^2 ./ 2)
+    xls   = A \ data[1:n_fit]
+    x     = SVector{3,Float64}(xls[1], xls[2], xls[3])
+
+    P   = SMatrix{3,3,Float64}(_P0_SCALE*I)
+    nll = 0.0
+
+    @inbounds for k in 1:N
+        if k > 1
+            x = Φ * x
+            P = Φ * P * Φ' + Q
+        end
+        # Scalar-H shortcut: H = [1 0 0]
+        ν = data[k] - x[1]
+        S = P[1,1] + R
+        S <= 0.0 && return _INVALID_NLL
+        nll += 0.5 * (log(S) + ν*ν/S)
+        # Kalman gain (3×1)
+        K = SVector{3,Float64}(P[1,1]/S, P[2,1]/S, P[3,1]/S)
+        x = x + K .* ν
+        # P = (I - K H) P = P - K * P[1,:]'
+        pr1 = SVector{3,Float64}(P[1,1], P[1,2], P[1,3])
+        P = P - K * pr1'
+    end
+    return nll
+end
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 """
@@ -283,7 +353,11 @@ function optimize_kf(data::Vector{Float64}, cfg::OptimizeConfig)::OptimizeResult
     push!(theta0, log10(cfg.q_rwfm))
     cfg.q_irwfm > 0 && push!(theta0, log10(cfg.q_irwfm))
 
-    obj = th -> _kf_nll(th, data, cfg)
+    obj = if cfg.nstates == 3
+        th -> _kf_nll_static(th, data, cfg)
+    else
+        th -> _kf_nll(th, data, cfg)
+    end
 
     theta_opt, nll_opt, n_evals, converged =
         _nelder_mead(obj, theta0; max_iter = cfg.max_iter, tol = cfg.tol)

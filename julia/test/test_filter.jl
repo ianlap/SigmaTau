@@ -179,4 +179,17 @@ using Statistics
         @test abs(log10(res.q_wfm) - log10(q_wfm_true)) < 1.0
     end
 
+    @testset "_kf_nll_static matches _kf_nll output" begin
+        Random.seed!(123)
+        N  = 2048; τ = 1.0
+        x  = cumsum(randn(N))
+        cfg = OptimizeConfig(q_wpm=1.0, q_wfm=0.5, q_rwfm=1e-4,
+                             nstates=3, tau=τ, verbose=false,
+                             optimize_qwpm=true)
+        theta = [log10(cfg.q_wpm), log10(cfg.q_wfm), log10(cfg.q_rwfm)]
+        nll_slow = SigmaTau._kf_nll(theta, x, cfg)
+        nll_fast = SigmaTau._kf_nll_static(theta, x, cfg)
+        @test isapprox(nll_slow, nll_fast; rtol=1e-10)
+    end
+
 end  # @testset "Kalman filter"
