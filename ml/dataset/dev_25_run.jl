@@ -1,16 +1,18 @@
 # dev_25_run.jl — Generate 25-sample dev dataset + overlay plot data.
 #
 # Produces:
-#   ml/data/dev_25.npz              — features, labels, h_coeffs etc.
-#   ml/data/dev_25_adev.npz         — full ADEV curves for each synthetic sample + real data
-#   ml/data/dev_25_log.txt          — timing + convergence summary
-#   ml/data/dev_25_adev_overlay.png — overlay plot (synthetic vs real)
+#   ml/data/dev_25.h5                 — features, labels, h_coeffs etc. (HDF5)
+#   ml/data/dev_25_adev.csv           — ADEV/MDEV/HDEV/MHDEV curves per sample (long format)
+#   ml/data/dev_25_real.csv           — real-data ADEV on canonical τ grid
+#   ml/data/dev_25_meta.csv           — per-sample metadata (h's, fpm_present, nll, converged)
+#   ml/data/dev_25_log.txt            — timing + convergence summary
+#   ml/data/dev_25_adev_overlay.png   — overlay plot (synthetic vs real)
 
 using Pkg; Pkg.activate(@__DIR__)
 include("generate_dataset.jl")
 using .DatasetGen
 using SigmaTau
-using NPZ
+using HDF5
 using Random
 using Statistics, Printf
 using Plots
@@ -49,39 +51,65 @@ factor_to_scalar(unit) =
     unit == "microseconds" ? 1e-6 :
     NaN
 
+"""Write a NamedTuple of equal-length vectors as a CSV file."""
+function write_csv(path::String, data::NamedTuple)
+    keys_ = collect(keys(data))
+    n = length(first(values(data)))
+    open(path, "w") do io
+        println(io, join(keys_, ","))
+        for i in 1:n
+            row = [v[i] for v in values(data)]
+            row_strs = map(x -> x isa AbstractFloat ? (@sprintf "%.6e" x) : string(x), row)
+            println(io, join(row_strs, ","))
+        end
+    end
+end
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 function main()
     out_dir  = joinpath(@__DIR__, "..", "data")
     mkpath(out_dir)
 
-    npz_path  = joinpath(out_dir, "dev_25.npz")
-    adev_path = joinpath(out_dir, "dev_25_adev.npz")
+    h5_path   = joinpath(out_dir, "dev_25.h5")
+    adev_path = joinpath(out_dir, "dev_25_adev.csv")
+    real_path_out = joinpath(out_dir, "dev_25_real.csv")
+    meta_path = joinpath(out_dir, "dev_25_meta.csv")
     log_path  = joinpath(out_dir, "dev_25_log.txt")
     plot_path = joinpath(out_dir, "dev_25_adev_overlay.png")
 
-    isfile(npz_path) && rm(npz_path)
-    isfile(npz_path * ".checkpoint.npz") && rm(npz_path * ".checkpoint.npz")
+    isfile(h5_path) && rm(h5_path)
+    isfile(h5_path * ".checkpoint.h5") && rm(h5_path * ".checkpoint.h5")
 
     # ── Generate the 25-sample dataset (features + q labels) ─────────────────
     t0 = time()
-    DatasetGen.generate_dataset(npz_path; n_samples=n_samples, N=N, τ₀=τ₀, resume=false)
+    DatasetGen.generate_dataset(h5_path; n_samples=n_samples, N=N, τ₀=τ₀, resume=false)
     gen_elapsed = time() - t0
     @info "Dataset generation done" elapsed=gen_elapsed
 
-    # ── Re-run phase generation to extract per-sample ADEV curves ────────────
+    # ── Re-run phase generation to extract per-sample ADEV/MDEV/HDEV/MHDEV ──
     # (dataset stores features, not raw phase; double compute is fine for n=25)
-    adev_curves = Matrix{Float64}(undef, n_samples, length(CANONICAL_M_LIST))
-    h_table     = Matrix{Float64}(undef, n_samples, 5)   # log10(h₊₂,₊₁,₀,₋₁,₋₂)
-    fpm_table   = falses(n_samples)
+    n_taus       = length(CANONICAL_M_LIST)
+    adev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
+    mdev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
+    hdev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
+    mhdev_curves = Matrix{Float64}(undef, n_samples, n_taus)
+    h_table      = Matrix{Float64}(undef, n_samples, 5)   # log10(h₊₂,₊₁,₀,₋₁,₋₂)
+    fpm_table    = falses(n_samples)
 
     t1 = time()
     for i in 1:n_samples
         rng = Xoshiro(42 + i)
         p   = DatasetGen.draw_sample_params(rng)
         x   = generate_composite_noise(p.h_coeffs, N, τ₀; seed = 42 + i + 10_000_000)
-        r   = adev(x, τ₀; m_list = CANONICAL_M_LIST)
-        adev_curves[i, :] .= r.deviation
+        r_adev  = adev( x, τ₀; m_list = CANONICAL_M_LIST)
+        r_mdev  = mdev( x, τ₀; m_list = CANONICAL_M_LIST)
+        r_hdev  = hdev( x, τ₀; m_list = CANONICAL_M_LIST)
+        r_mhdev = mhdev(x, τ₀; m_list = CANONICAL_M_LIST)
+        adev_curves[i, :]  .= r_adev.deviation
+        mdev_curves[i, :]  .= r_mdev.deviation
+        hdev_curves[i, :]  .= r_hdev.deviation
+        mhdev_curves[i, :] .= r_mhdev.deviation
         for (j, α) in enumerate((2.0, 1.0, 0.0, -1.0, -2.0))
             h_table[i, j] = haskey(p.h_coeffs, α) ? log10(p.h_coeffs[α]) : NaN
         end
@@ -91,7 +119,7 @@ function main()
 
     # ── Load real-data and compute ADEV on canonical grid ────────────────────
     real_path = joinpath(@__DIR__, "..", "..", "reference", "raw", "6k27febunsteered.txt")
-    real_adev = fill(NaN, length(CANONICAL_M_LIST))
+    real_adev = fill(NaN, n_taus)
     real_unit = "unknown"
     factor    = NaN
 
@@ -134,20 +162,55 @@ function main()
         @warn "Real-data file not found; skipping real-data ADEV" real_path
     end
 
-    # ── Save ADEV data ────────────────────────────────────────────────────────
-    NPZ.npzwrite(adev_path, Dict(
-        "taus"                   => CANONICAL_TAU_GRID,
-        "adev_synth"             => adev_curves,
-        "adev_real"              => real_adev,
-        "h_log10"                => h_table,
-        "fpm_present"            => UInt8.(fpm_table),
-        "real_unit_factor_used"  => factor_to_scalar(real_unit),
-    ))
-    @info "ADEV NPZ saved" adev_path
+    # ── Save ADEV CSV (long format, 25×20 = 500 rows) ────────────────────────
+    τ_grid = CANONICAL_TAU_GRID
+    open(adev_path, "w") do io
+        println(io, "sample_idx,tau,adev,mdev,hdev,mhdev")
+        for i in 1:n_samples
+            for j in 1:n_taus
+                @printf(io, "%d,%.6e,%.6e,%.6e,%.6e,%.6e\n",
+                    i, τ_grid[j],
+                    adev_curves[i, j], mdev_curves[i, j],
+                    hdev_curves[i, j], mhdev_curves[i, j])
+            end
+        end
+    end
+    @info "ADEV CSV saved" adev_path
+
+    # ── Save real-data ADEV CSV (20 rows) ────────────────────────────────────
+    open(real_path_out, "w") do io
+        println(io, "tau,adev_real")
+        for j in 1:n_taus
+            @printf(io, "%.6e,%.6e\n", τ_grid[j], real_adev[j])
+        end
+    end
+    @info "Real ADEV CSV saved" real_path_out
+
+    # ── Save per-sample metadata CSV ─────────────────────────────────────────
+    # Read back converged / nll from HDF5
+    nll_read  = Vector{Float64}(undef, n_samples)
+    conv_read = Vector{Bool}(undef, n_samples)
+    h5open(h5_path, "r") do f
+        nll_read  .= f["diagnostics/nll_values"][]
+        conv_read .= Bool.(f["diagnostics/converged"][])
+    end
+
+    open(meta_path, "w") do io
+        println(io, "sample_idx,h_log10_p2,h_log10_p1,h_log10_0,h_log10_m1,h_log10_m2,fpm_present,nll,converged")
+        for i in 1:n_samples
+            @printf(io, "%d,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.6e,%d\n",
+                i,
+                h_table[i,1], h_table[i,2], h_table[i,3], h_table[i,4], h_table[i,5],
+                Int(fpm_table[i]),
+                nll_read[i],
+                Int(conv_read[i]))
+        end
+    end
+    @info "Meta CSV saved" meta_path
 
     # ── Overlay plot ──────────────────────────────────────────────────────────
     plot_saved = try
-        τ = CANONICAL_TAU_GRID
+        τ = τ_grid
         p = plot(xscale=:log10, yscale=:log10,
                  xlabel="τ (s)", ylabel="σ_y(τ)",
                  title="Synthetic (n=25) vs Real GMR6000 ADEV",
@@ -167,8 +230,7 @@ function main()
     end
 
     # ── Summary log ──────────────────────────────────────────────────────────
-    d = NPZ.npzread(npz_path)
-    n_converged = sum(Int, d["converged"])
+    n_converged = sum(Int, conv_read)
 
     open(log_path, "w") do io
         println(io, "n_samples:          ", n_samples)
@@ -186,16 +248,20 @@ function main()
         println(io, "estimated_10k_s:    ", round(est_10k_s, digits=1),
                     "  (", round(est_10k_s / 3600, digits=2), " hr)")
         println(io, "plot_saved:         ", plot_saved)
-        println(io, "npz_path:           ", npz_path)
-        println(io, "adev_path:          ", adev_path)
+        println(io, "h5_path:            ", h5_path)
+        println(io, "adev_csv:           ", adev_path)
+        println(io, "real_csv:           ", real_path_out)
+        println(io, "meta_csv:           ", meta_path)
         plot_saved && println(io, "plot_path:          ", plot_path)
     end
 
     println(read(log_path, String))
     println("done.")
-    println("  dataset NPZ : ", npz_path)
-    println("  ADEV NPZ    : ", adev_path)
-    plot_saved && println("  overlay plot: ", plot_path)
+    println("  dataset HDF5 : ", h5_path)
+    println("  ADEV CSV     : ", adev_path)
+    println("  real CSV     : ", real_path_out)
+    println("  meta CSV     : ", meta_path)
+    plot_saved && println("  overlay plot : ", plot_path)
 end
 
 main()

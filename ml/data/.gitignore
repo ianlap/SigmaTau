@@ -2,3 +2,5 @@
 *.npz
 *.png
 *.txt
+*.csv
+*.md

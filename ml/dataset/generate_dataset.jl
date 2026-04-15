@@ -1,23 +1,29 @@
 # generate_dataset.jl — ML dataset driver (Julia)
 #
-# Produces ml/data/dataset_v1.npz with 10,000 synthetic samples.  Threaded;
+# Produces ml/data/dataset_v1.h5 with 10,000 synthetic samples.  Threaded;
 # checkpoints every CKPT_EVERY samples; resumes from checkpoint if present.
 
 module DatasetGen
 
 using Random, Statistics
-using NPZ
+using HDF5
 using SigmaTau
 
 export draw_sample_params, run_one_sample, generate_dataset, SampleParams, SampleResult
 
-# ── Sampling ranges from the spec (§2.3) — log₁₀(h_α) ────────────────────────
+# ── h_α sampling ranges (log₁₀) — anchored to GMR6000 Rb (HSO-3 class) ───────
+#
+# Anchored to GMR6000 NLL fits (see ml/data/proposed_h_ranges.md):
+#   h_+2 ≈ -17.56 (WPM), h_0 ≈ -21.32 (WFM), h_-2 near zero
+#   flicker floor ≈ 3e-13 → h_-1 ≈ -25 (inferred)
+# Ranges tightened to cover Rb / HSO / OCXO class (flicker floor 1e-14 to 1e-11);
+# do NOT extend to TCXOs (they'd dominate with WPM levels ≥ 1e-8 at τ=1).
 const _H_RANGES = Dict(
-     2.0 => (-26.5, -23.5),   # WPM
-     1.0 => (-25.5, -22.5),   # FPM (only when present)
-     0.0 => (-25.5, -22.5),   # WFM
-    -1.0 => (-25.5, -22.5),   # FFM
-    -2.0 => (-27.5, -24.5),   # RWFM
+     2.0 => (-20.0, -15.0),   # WPM  — σ_y(1) ∈ [1.9e-11, 6e-9]; Rb anchor -17.56
+     1.0 => (-26.0, -21.0),   # FPM  — no direct fit; proxy tightened around typical Rb/OCXO values
+     0.0 => (-24.0, -18.0),   # WFM  — σ_y(1) ∈ [7e-13, 7e-10]; Rb anchor -21.32
+    -1.0 => (-27.0, -22.0),   # FFM  — flicker floor ∈ [1e-14, 1e-11]; user target ~1e-12
+    -2.0 => (-32.0, -24.0),   # RWFM — both Rb fits near-zero; range covers "absent" to "modest"
 )
 const _FPM_PROBABILITY = 0.30
 
@@ -103,7 +109,7 @@ const CKPT_EVERY = 500
     generate_dataset(output_path; n_samples=10_000, N=131_072, τ₀=1.0, resume=true)
 
 Main driver. Threads over sample index.  Checkpoints every `CKPT_EVERY`
-samples to `<output_path>.checkpoint.npz`; resumes from the highest
+samples to `<output_path>.checkpoint.h5`; resumes from the highest
 completed index when `resume=true`.
 """
 function generate_dataset(output_path::String;
@@ -121,18 +127,19 @@ function generate_dataset(output_path::String;
 
     # Resume logic
     done = falses(n_samples)
-    ckpt = output_path * ".checkpoint.npz"
+    ckpt = output_path * ".checkpoint.h5"
     if resume && isfile(ckpt)
-        data = NPZ.npzread(ckpt)
-        nprev = Int(data["n_done"])
-        @info "Resuming from checkpoint" nprev
-        X[1:nprev, :]      .= data["X"][1:nprev, :]
-        y[1:nprev, :]      .= data["y"][1:nprev, :]
-        H[1:nprev, :]      .= data["h_coeffs"][1:nprev, :]
-        fpm[1:nprev]        .= data["fpm_present"][1:nprev]
-        nll_vals[1:nprev]   .= data["nll_values"][1:nprev]
-        conv[1:nprev]       .= data["converged"][1:nprev]
-        done[1:nprev]       .= true
+        h5open(ckpt, "r") do f
+            nprev = Int(read(f["meta/n_done"]))
+            @info "Resuming from checkpoint" nprev
+            X[1:nprev, :]    .= f["features/X"][1:nprev, :]
+            y[1:nprev, :]    .= f["labels/q_log10"][1:nprev, :]
+            H[1:nprev, :]    .= f["labels/h_log10"][1:nprev, :]
+            fpm[1:nprev]     .= Bool.(f["labels/fpm_present"][1:nprev])
+            nll_vals[1:nprev] .= f["diagnostics/nll_values"][1:nprev]
+            conv[1:nprev]    .= Bool.(f["diagnostics/converged"][1:nprev])
+            done[1:nprev]    .= true
+        end
     end
 
     pending = findall(.!done)
@@ -157,34 +164,32 @@ function generate_dataset(output_path::String;
         if c % CKPT_EVERY == 0
             elapsed = time() - t_start
             @info "checkpoint" done=c of=n_samples elapsed=elapsed
-            _write_npz(ckpt, X, y, H, fpm, nll_vals, conv, c)
+            _write_h5(ckpt, X, y, H, fpm, nll_vals, conv, c)
         end
     end
 
     # Final write
-    _write_npz(output_path, X, y, H, fpm, nll_vals, conv, n_samples; final=true)
+    _write_h5(output_path, X, y, H, fpm, nll_vals, conv, n_samples; final=true)
     isfile(ckpt) && rm(ckpt)
     @info "done" output_path total=n_samples elapsed=(time() - t_start)
     nothing
 end
 
-function _write_npz(path, X, y, H, fpm, nll_vals, conv, n_done; final=false)
+function _write_h5(path, X, y, H, fpm, nll_vals, conv, n_done; final=false)
     mkpath(dirname(path))
-    payload = Dict(
-        "X"            => X,
-        "y"            => y,
-        "h_coeffs"     => H,
-        "fpm_present"  => UInt8.(fpm),
-        "nll_values"   => nll_vals,
-        "converged"    => UInt8.(conv),
-        "taus"         => CANONICAL_TAU_GRID,
-        "n_done"       => n_done,
-    )
-    NPZ.npzwrite(path, payload)
-    # NPZ.jl does not support string arrays; write feature names as companion file
-    names_path = path * ".feature_names.txt"
-    open(names_path, "w") do io
-        println(io, join(FEATURE_NAMES, "|"))
+    h5open(path, "w") do f
+        # Feature matrix (float32) and label matrices
+        f["features/X"]          = X              # Float32 (n_samples × 196)
+        f["labels/q_log10"]      = y              # Float64 (n_samples × 3)
+        f["labels/h_log10"]      = H              # Float64 (n_samples × 5)
+        f["labels/fpm_present"]  = UInt8.(fpm)    # 0/1 so HDF5 handles it cleanly
+        f["diagnostics/nll_values"] = nll_vals    # Float64 (n_samples,)
+        f["diagnostics/converged"]  = UInt8.(conv)  # 0/1
+        # Metadata (τ grid, feature names, progress)
+        f["meta/taus"]            = CANONICAL_TAU_GRID   # Float64 (20,)
+        f["meta/feature_names"]   = FEATURE_NAMES         # Vector{String} (196,)
+        f["meta/n_done"]          = n_done               # Int
+        f["meta/n_samples_total"] = size(X, 1)
     end
 end
 

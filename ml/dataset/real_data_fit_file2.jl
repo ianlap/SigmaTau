@@ -14,7 +14,6 @@ using Pkg; Pkg.activate(@__DIR__)
 using SigmaTau
 using Printf, Statistics, LinearAlgebra
 using Plots
-using NPZ
 
 const file2_path = joinpath(@__DIR__, "..", "..", "reference", "raw", "6krb25apr.txt")
 const data_dir   = joinpath(@__DIR__, "..", "data")
@@ -121,25 +120,6 @@ function main()
     # --- Theoretical ADEVs ---
     adev_theo_mhdev = adev_from_q(fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm, τs, f_h)
     adev_theo_nll   = adev_from_q(nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm, τs, f_h)
-
-    # --- Save NPZ ---
-    out_npz = joinpath(data_dir, "real_data_fit_file2.npz")
-    NPZ.npzwrite(out_npz, Dict(
-        "tau"                  => collect(τs),
-        "adev_real"            => collect(r_adev.deviation),
-        "mdev_real"            => collect(r_mdev.deviation),
-        "hdev_real"            => collect(r_hdev.deviation),
-        "mhdev_real"           => collect(r_mhdev.deviation),
-        "adev_theo_mhdevfit"   => adev_theo_mhdev,
-        "adev_theo_nllfit"     => adev_theo_nll,
-        "q_wpm_mhdev"          => fit_res.q_wpm,
-        "q_wfm_mhdev"          => fit_res.q_wfm,
-        "q_rwfm_mhdev"         => fit_res.q_rwfm,
-        "q_wpm_nll"            => nll_res.q_wpm,
-        "q_wfm_nll"            => nll_res.q_wfm,
-        "q_rwfm_nll"           => nll_res.q_rwfm,
-    ))
-    @info "Saved NPZ" out_npz
 
     # --- Save CSV (file2) ---
     out_csv2 = joinpath(data_dir, "real_data_fit_file2.csv")

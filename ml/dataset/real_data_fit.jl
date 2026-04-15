@@ -8,7 +8,6 @@ using Pkg; Pkg.activate(@__DIR__)
 using SigmaTau
 using Printf, Statistics, LinearAlgebra
 using Plots
-using NPZ
 
 const real_path = joinpath(@__DIR__, "..", "..", "reference", "raw", "6k27febunsteered.txt")
 
@@ -131,24 +130,19 @@ function main()
     adev_theo_mhdev = adev_from_q(fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm, τs)
     adev_theo_nll   = adev_from_q(nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm, τs)
 
-    # --- Save NPZ of raw data ---
-    out_npz = joinpath(@__DIR__, "..", "data", "real_data_fit.npz")
-    NPZ.npzwrite(out_npz, Dict(
-        "tau"              => collect(τs),
-        "adev_real"        => collect(r_adev.deviation),
-        "mdev_real"        => collect(r_mdev.deviation),
-        "hdev_real"        => collect(r_hdev.deviation),
-        "mhdev_real"       => collect(r_mhdev.deviation),
-        "adev_theo_mhdevfit" => adev_theo_mhdev,
-        "adev_theo_nllfit"   => adev_theo_nll,
-        "q_wpm_mhdev"   => fit_res.q_wpm,
-        "q_wfm_mhdev"   => fit_res.q_wfm,
-        "q_rwfm_mhdev"  => fit_res.q_rwfm,
-        "q_wpm_nll"     => nll_res.q_wpm,
-        "q_wfm_nll"     => nll_res.q_wfm,
-        "q_rwfm_nll"    => nll_res.q_rwfm,
-    ))
-    @info "Saved NPZ" out_npz
+    # --- Save CSV of raw data ---
+    out_csv = joinpath(@__DIR__, "..", "data", "real_data_fit.csv")
+    open(out_csv, "w") do io
+        println(io, "tau,adev,mdev,hdev,mhdev,adev_theo_mhdevfit,adev_theo_nllfit")
+        for i in eachindex(τs)
+            @printf(io, "%.3f,%.6e,%.6e,%.6e,%.6e,%.6e,%.6e\n",
+                τs[i],
+                r_adev.deviation[i], r_mdev.deviation[i],
+                r_hdev.deviation[i], r_mhdev.deviation[i],
+                adev_theo_mhdev[i], adev_theo_nll[i])
+        end
+    end
+    @info "Saved CSV" out_csv
 
     # --- Plot ---
     plt = plot(xscale=:log10, yscale=:log10,
