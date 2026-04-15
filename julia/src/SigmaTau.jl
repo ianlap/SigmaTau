@@ -33,7 +33,7 @@ export totdev, mtotdev, htotdev, mhtotdev
 export KalmanConfig, KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export PredictConfig, PredictResult, kf_predict
-export OptimizeConfig, OptimizeResult, optimize_kf
+export OptimizeConfig, OptimizeResult, optimize_kf, optimize_kf_nll
 export generate_power_law_noise
 export generate_composite_noise
 export CANONICAL_TAU_GRID, CANONICAL_M_LIST, FEATURE_NAMES, compute_feature_vector
