@@ -17,7 +17,7 @@ using Random
 using Statistics, Printf
 using Plots
 
-const N         = 131_072
+const N         = 524_288
 const τ₀        = 1.0
 const n_samples = 25
 
@@ -88,8 +88,10 @@ function main()
     @info "Dataset generation done" elapsed=gen_elapsed
 
     # ── Re-run phase generation to extract per-sample ADEV/MDEV/HDEV/MHDEV ──
-    # (dataset stores features, not raw phase; double compute is fine for n=25)
-    n_taus       = length(CANONICAL_M_LIST)
+    # Visualization m_list extends beyond CANONICAL_M_LIST to cover the longer
+    # τ reach enabled by larger N (N=524288, safety factor 10 → m_max ≈ 52k).
+    viz_m_list = vcat(CANONICAL_M_LIST, [18765, 30717, 50287])
+    n_taus       = length(viz_m_list)
     adev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
     mdev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
     hdev_curves  = Matrix{Float64}(undef, n_samples, n_taus)
@@ -102,10 +104,10 @@ function main()
         rng = Xoshiro(42 + i)
         p   = DatasetGen.draw_sample_params(rng)
         x   = generate_composite_noise(p.h_coeffs, N, τ₀; seed = 42 + i + 10_000_000)
-        r_adev  = adev( x, τ₀; m_list = CANONICAL_M_LIST)
-        r_mdev  = mdev( x, τ₀; m_list = CANONICAL_M_LIST)
-        r_hdev  = hdev( x, τ₀; m_list = CANONICAL_M_LIST)
-        r_mhdev = mhdev(x, τ₀; m_list = CANONICAL_M_LIST)
+        r_adev  = adev( x, τ₀; m_list = viz_m_list)
+        r_mdev  = mdev( x, τ₀; m_list = viz_m_list)
+        r_hdev  = hdev( x, τ₀; m_list = viz_m_list)
+        r_mhdev = mhdev(x, τ₀; m_list = viz_m_list)
         adev_curves[i, :]  .= r_adev.deviation
         mdev_curves[i, :]  .= r_mdev.deviation
         hdev_curves[i, :]  .= r_hdev.deviation
@@ -155,15 +157,20 @@ function main()
         @info "Unit detection" raw_adev1=ad1 unit=real_unit factor=factor
 
         ph = ph_raw .* factor
-        w  = min(N, length(ph))
-        r  = adev(view(ph, 1:w), τ₀; m_list = CANONICAL_M_LIST)
-        real_adev = r.deviation
+        # Use FULL real file for real-data ADEV so long-τ behavior is visible
+        # (synthetic capped at N=524288; real file ~3M samples → τ up to ~300k)
+        real_m_list = vcat(viz_m_list, [82336, 134898, 221043])  # extend further using full file
+        r  = adev(ph, τ₀; m_list = real_m_list)
+        # Store onto n_taus slots (first columns); extras held separately
+        real_adev_full = r.deviation
+        real_tau_full  = r.tau
+        real_adev = real_adev_full[1:n_taus]
     else
         @warn "Real-data file not found; skipping real-data ADEV" real_path
     end
 
-    # ── Save ADEV CSV (long format, 25×20 = 500 rows) ────────────────────────
-    τ_grid = CANONICAL_TAU_GRID
+    # ── Save ADEV CSV (long format, 25 samples × n_taus rows) ────────────────
+    τ_grid = Float64.(viz_m_list)   # τ = m·τ₀ with τ₀=1
     open(adev_path, "w") do io
         println(io, "sample_idx,tau,adev,mdev,hdev,mhdev")
         for i in 1:n_samples
@@ -177,11 +184,17 @@ function main()
     end
     @info "ADEV CSV saved" adev_path
 
-    # ── Save real-data ADEV CSV (20 rows) ────────────────────────────────────
+    # ── Save real-data ADEV CSV (extended m list, more τ values than synthetic) ─
     open(real_path_out, "w") do io
         println(io, "tau,adev_real")
-        for j in 1:n_taus
-            @printf(io, "%.6e,%.6e\n", τ_grid[j], real_adev[j])
+        if @isdefined(real_tau_full)
+            for j in 1:length(real_tau_full)
+                @printf(io, "%.6e,%.6e\n", real_tau_full[j], real_adev_full[j])
+            end
+        else
+            for j in 1:n_taus
+                @printf(io, "%.6e,%.6e\n", τ_grid[j], real_adev[j])
+            end
         end
     end
     @info "Real ADEV CSV saved" real_path_out
@@ -218,8 +231,8 @@ function main()
         for i in 1:n_samples
             plot!(p, τ, adev_curves[i, :]; color=:steelblue, alpha=0.4, lw=0.8, label=false)
         end
-        if isfile(real_path)
-            plot!(p, τ, real_adev; color=:red, lw=2.5, label="GMR6000 Feb (real)")
+        if isfile(real_path) && @isdefined(real_tau_full)
+            plot!(p, real_tau_full, real_adev_full; color=:red, lw=2.5, label="GMR6000 Feb (real, full file)")
         end
         savefig(p, plot_path)
         @info "Overlay plot saved" plot_path

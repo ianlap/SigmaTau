@@ -23,7 +23,7 @@ const _H_RANGES = Dict(
      1.0 => (-26.0, -21.0),   # FPM  — no direct fit; proxy tightened around typical Rb/OCXO values
      0.0 => (-24.0, -18.0),   # WFM  — σ_y(1) ∈ [7e-13, 7e-10]; Rb anchor -21.32
     -1.0 => (-27.0, -22.0),   # FFM  — flicker floor ∈ [1e-14, 1e-11]; user target ~1e-12
-    -2.0 => (-32.0, -24.0),   # RWFM — both Rb fits near-zero; range covers "absent" to "modest"
+    -2.0 => (-32.0, -26.0),   # RWFM — capped at -26 so RWFM/WPM crossover stays at τ ≳ 10³ s even for lowest-WPM samples
 )
 const _FPM_PROBABILITY = 0.30
 
@@ -70,7 +70,7 @@ end
 Generate a single dataset sample with deterministic seed `42 + idx`.
 """
 function run_one_sample(idx::Integer;
-                        N::Int   = 131_072,
+                        N::Int   = 524_288,
                         τ₀::Real = 1.0,
                         verbose::Bool = false)
     rng = Xoshiro(42 + idx)
@@ -106,7 +106,7 @@ end
 const CKPT_EVERY = 500
 
 """
-    generate_dataset(output_path; n_samples=10_000, N=131_072, τ₀=1.0, resume=true)
+    generate_dataset(output_path; n_samples=10_000, N=524_288, τ₀=1.0, resume=true)
 
 Main driver. Threads over sample index.  Checkpoints every `CKPT_EVERY`
 samples to `<output_path>.checkpoint.h5`; resumes from the highest
@@ -114,7 +114,7 @@ completed index when `resume=true`.
 """
 function generate_dataset(output_path::String;
                           n_samples::Int = 10_000,
-                          N::Int         = 131_072,
+                          N::Int         = 524_288,
                           τ₀::Real       = 1.0,
                           resume::Bool   = true)
     n_features = 196
