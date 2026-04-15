@@ -7,6 +7,8 @@ This document outlines future development tasks, prioritized by impact and estim
 | Task | Description | Difficulty |
 | :--- | :--- | :--- |
 | **Mtot multi-noise validation** | Verify mtot deviation and bias correction across all 5 standard noise types (WPM to RWFM) against Stable32. | 🟢 Easy |
+| **Refactor Oversized MATLAB Functions** | Split `engine.m`, `kalman_filter.m`, and `optimize.m` to comply with the <100 line mandate. | 🟡 Medium |
+| **Noise ID Threshold Alignment** | Update `NEFF_RELIABLE` to 30 (from 50) in both MATLAB and Julia to match GEMINI.md mandate §2. | 🟢 Easy |
 | **MATLAB KF Unit Tests** | Add dedicated unit tests for the ported Kalman Filter functions in `+kf/` (matching the rigor of `julia/test/test_filter.jl`). | 🟢 Easy |
 | **MHTOTDEV EDF Model** | Refine the MHTOTDEV EDF coefficients. Current implementation uses approximations; a more rigorous Monte Carlo or analytical fit is needed. | 🔴 Hard |
 | **Noise ID Scaling** | Optimize the lag-1 ACF identification for extremely large datasets (N > 10^7) by implementing block-processing or decimation-based estimation. | 🟡 Medium |

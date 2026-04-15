@@ -122,7 +122,8 @@ if strcmpi(data_type, 'phase')
     % AVAR at tau = m*tau0. Computed from decimated phase so the detrend
     % above carries through; the m^2 factor corrects simple_avar(..., 1)
     % to SP1065 Eq. 14's m^2*tau0^2 denominator.
-    avar_val   = sigmatau.dev.adev_kernel(x_dec, 1, 1.0) / double(m)^2;
+    res = sigmatau.dev.adev(x_dec, 1.0, 1);
+    avar_val = res.deviation^2 / double(m)^2;
     N_avar     = numel(x_dec) - 2;
 
     dx  = diff(x);
@@ -178,7 +179,8 @@ end
 % Refine alpha=2 vs alpha=1 using R(n) for White PM vs Flicker PM
 if mu_best == -2 && strcmpi(data_type, 'phase')
     adev_val = sqrt(avar_val);
-    mdev_val = sqrt(sigmatau.dev.mdev_kernel(x, m, 1.0));
+    res = sigmatau.dev.mdev(x, 1.0, m);
+    mdev_val = res.deviation;
     if ~isnan(mdev_val) && adev_val > 0
         Rn_obs = (mdev_val / adev_val)^2;
         R_hi   = rn_theory(m, 0);    % alpha=2 (White PM)

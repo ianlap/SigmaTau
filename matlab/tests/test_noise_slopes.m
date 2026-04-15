@@ -7,26 +7,9 @@
 % Tolerance: ±0.15 on log-log slope (statistical noise).
 
 rng(12345);
-N    = 8192;
+N    = 16384;
 tau0 = 1.0;
 TOL  = 0.15;
-
-% Power-law noise generator using the legacy function
-% Since the legacy function uses rng('shuffle'), we use a simpler approach.
-function y = gen_noise(alpha, N, tau0)
-% Generate N-point frequency data with PSD ~ f^alpha using Kasdin method.
-% Returns phase data (cumsum of frequency data).
-Nf = N;
-f  = (1:Nf/2)';
-S  = f .^ (alpha/2);
-phase = 2*pi*rand(Nf/2-1, 1);
-half  = zeros(Nf/2+1, 1);
-half(2:Nf/2) = S(1:end-1) .* exp(1j*phase);
-full = [half; conj(flipud(half(2:Nf/2)))];
-x_freq = real(ifft(full));
-x_freq = (x_freq - mean(x_freq)) / std(x_freq);
-y = cumsum(x_freq * tau0);   % phase
-end
 
 configs = {
     2,  -1.0,  'White PM  (alpha=2)';
@@ -41,7 +24,7 @@ for k = 1:size(configs,1)
     slope_exp  = configs{k,2};
     label      = configs{k,3};
 
-    x = gen_noise(alpha_true, N, tau0);
+    x = sigmatau.noise.generate(alpha_true, N, tau0);
 
     result = sigmatau.dev.adev(x, tau0, m_list);
 
