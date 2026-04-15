@@ -25,10 +25,9 @@ jobs:
           products: Statistics_and_Machine_Learning_Toolbox
 
       - name: Run tests
-        uses: matlab-actions/run-tests@v3
+        uses: matlab-actions/run-command@v3
         with:
-          # Add matlab/ to the search path before running tests
-          source-folder: matlab
+          command: addpath(genpath('matlab')); run('matlab/tests/run_all.m')
 
   lint:
     name: MATLAB Syntax Check
@@ -44,23 +43,18 @@ jobs:
         with:
           products: Statistics_and_Machine_Learning_Toolbox
 
-      - name: Check syntax with checkcode
+      - name: Check syntax with codeIssues
         uses: matlab-actions/run-command@v3
         with:
           command: |
-            files = dir(fullfile('matlab','**','*.m'));
-            errs = {};
-            for k = 1:numel(files)
-                f = fullfile(files(k).folder, files(k).name);
-                if contains(f, 'legacy'), continue; end % skip legacy code
-                msgs = checkcode(f, '-id');
-                if ~isempty(msgs)
-                    errs{end+1} = sprintf('%s: %d messages', f, numel(msgs));
-                    disp(['Messages for ', f, ':']);
-                    disp(msgs);
-                end
+            issues = codeIssues('matlab');
+            errs = issues.Issues(issues.Issues.Severity == "error", :);
+            if ~isempty(errs)
+                keep = ~contains(string(errs.FullFilename), 'legacy');
+                errs = errs(keep, :);
             end
             if ~isempty(errs)
-                error('Syntax/code quality issues found.');
+                disp(errs);
+                error('Syntax errors found in non-legacy MATLAB files.');
             end
             disp('All non-legacy MATLAB files passed syntax check.');

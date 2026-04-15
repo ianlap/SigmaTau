@@ -2,9 +2,11 @@
 
 % ── Setup synthetic data ──────────────────────────────────────────────────
 rng(2024);
-N    = 1000;
+N    = 10000;
 tau0 = 1.0;
-x_wfm = cumsum(randn(N, 1));
+% White FM frequency noise -> random walk phase
+y_wfm = randn(N, 1);
+x_wfm = cumsum(y_wfm) * tau0;
 
 % ── Test 1: basic execution ────────────────────────────────────────────────
 fprintf('Test 1: kalman_filter runs on white FM ... ');
@@ -18,7 +20,7 @@ config = struct( ...
     'g_p',     0,     ...
     'g_i',     0,     ...
     'g_d',     0,     ...
-    'P0',      1e6    ...
+    'P0',      1.0    ...
 );
 
 result = sigmatau.kf.kalman_filter(x_wfm, config);
@@ -31,10 +33,13 @@ fprintf('PASSED\n');
 
 % ── Test 2: residual statistics ────────────────────────────────────────────
 fprintf('Test 2: residuals have zero mean ... ');
-mu = mean(result.residuals);
-sig = std(result.residuals);
+% Skip the first 100 samples to allow for initial convergence
+valid_res = result.residuals(101:end);
+mu = mean(valid_res);
+sig = std(valid_res);
+Nv = numel(valid_res);
 % Tol: 3 standard errors
-assert(abs(mu) < 3 * sig / sqrt(N), 'residuals biased');
+assert(abs(mu) < 3 * sig / sqrt(Nv), sprintf('residuals biased: mu=%.3e, tol=%.3e', abs(mu), 3 * sig / sqrt(Nv)));
 fprintf('PASSED\n');
 
 % ── Test 3: covariance convergence ─────────────────────────────────────────

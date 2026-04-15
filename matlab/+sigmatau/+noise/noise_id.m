@@ -122,7 +122,8 @@ if strcmpi(data_type, 'phase')
     % AVAR at tau = m*tau0. Computed from decimated phase so the detrend
     % above carries through; the m^2 factor corrects simple_avar(..., 1)
     % to SP1065 Eq. 14's m^2*tau0^2 denominator.
-    avar_val   = sigmatau.dev.adev_kernel(x_dec, 1, 1.0) / double(m)^2;
+    res = sigmatau.dev.adev(x_dec, 1.0, 1);
+    avar_val = res.deviation^2 / double(m)^2;
     N_avar     = numel(x_dec) - 2;
 
     dx  = diff(x);
@@ -175,10 +176,23 @@ for i = 1:numel(mu_list)-1
     end
 end
 
-% Refine alpha=2 vs alpha=1 using R(n) for White PM vs Flicker PM
+% Refine alpha=2 vs alpha=1 using R(n) for White PM vs Flicker PM.
+% Inline the MDEV kernel here: calling sigmatau.dev.mdev would re-enter
+% sigmatau.dev.engine, which calls noise_id again → infinite recursion.
 if mu_best == -2 && strcmpi(data_type, 'phase')
     adev_val = sqrt(avar_val);
-    mdev_val = sqrt(sigmatau.dev.mdev_kernel(x, m, 1.0));
+    Ne = numel(x) - 3*m + 1;
+    mdev_val = NaN;
+    if Ne > 0
+        S  = cumsum([0; x(:)]);
+        s1 = S(1+m:Ne+m)     - S(1:Ne);
+        s2 = S(1+2*m:Ne+2*m) - S(1+m:Ne+m);
+        s3 = S(1+3*m:Ne+3*m) - S(1+2*m:Ne+2*m);
+        mvar_val = sum((s3 - 2*s2 + s1).^2) / (Ne * 2 * m^4);   % tau0 = 1
+        if mvar_val >= 0
+            mdev_val = sqrt(mvar_val);
+        end
+    end
     if ~isnan(mdev_val) && adev_val > 0
         Rn_obs = (mdev_val / adev_val)^2;
         R_hi   = rn_theory(m, 0);    % alpha=2 (White PM)

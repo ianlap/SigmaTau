@@ -217,5 +217,7 @@ using SigmaTau
     include("test_filter.jl")
     include("test_noise_id.jl")
     include("test_noise_fit.jl")
+    include("test_noise_gen.jl")
+    include("test_ml_features.jl")
 
 end  # @testset "SigmaTau"

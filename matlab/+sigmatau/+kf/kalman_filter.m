@@ -61,14 +61,18 @@ function result = kalman_filter(data, config)
         end
         
         if k > 1
+            % Predict step
             x = sigmatau.kf.predict_state(x, Phi, pid_state(2), tau, ns);
             P = sigmatau.kf.predict_covariance(P, Phi, Q);
             
+            % Update working phase reference
             phase(k) = phase(k-1) + data(k) - data(k-1) + sumsteers_v(k-1);
         end
         
+        % Innovation
         innov = phase(k) - H * x;
         
+        % Kalman update
         S = H * P * H' + R;
         K = (P * H') / S;
         
@@ -76,14 +80,18 @@ function result = kalman_filter(data, config)
         P = (eye(ns) - K * H) * P;
         P = (P + P') / 2.0;
         
+        % Guard diagonal against numerical drift
         for idx = 1:ns
             P(idx, idx) = safe_sqrt(P(idx, idx))^2;
         end
         
+        % Posterior residual
         resid = phase(k) - x(1);
         
+        % PID steering update
         [steer, pid_state] = sigmatau.kf.update_pid(pid_state, x, ns, g_p, g_i, g_d);
         
+        % Cumulative steering
         if k == 1
             sumsteers_v(1) = pid_state(2);
             sum2steer_v(1) = sumsteers_v(1);
@@ -92,13 +100,10 @@ function result = kalman_filter(data, config)
             sum2steer_v(k) = sum2steer_v(k-1) + sumsteers_v(k);
         end
         
+        % Store results
         phase_est(k) = x(1);
-        if ns >= 2
-            freq_est(k) = x(2);
-        end
-        if ns >= 3
-            drift_est(k) = x(3);
-        end
+        if ns >= 2, freq_est(k) = x(2); end
+        if ns >= 3, drift_est(k) = x(3); end
         
         residuals_v(k) = resid;
         innov_v(k) = innov;

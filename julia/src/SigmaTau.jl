@@ -34,15 +34,20 @@ export KalmanConfig, KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export PredictConfig, PredictResult, kf_predict
 export OptimizeConfig, OptimizeResult, optimize_kf
+export generate_power_law_noise
+export generate_composite_noise
+export CANONICAL_TAU_GRID, CANONICAL_M_LIST, FEATURE_NAMES, compute_feature_vector
 
 # ── Source files (order matters: later files call earlier definitions) ─────────
 
 include("types.jl")      # DeviationResult, DevParams, helpers
 include("validate.jl")   # validate_phase_data, validate_tau0, detrend_*
 include("noise.jl")      # noise_id and supporting functions
+include("noise_gen.jl")  # generate_power_law_noise (Kasdin & Walter, 1992)
 include("stats.jl")      # EDF, CI, bias correction
 include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
+include("ml_features.jl") # canonical τ grid and 196-feature extraction
 include("noise_fit.jl")  # mhdev_fit (port of legacy kflab/mhdev_fit.m)
 include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
 include("predict.jl")    # PredictConfig, PredictResult, kf_predict
