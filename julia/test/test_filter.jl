@@ -192,4 +192,24 @@ using Statistics
         @test isapprox(nll_slow, nll_fast; rtol=1e-10)
     end
 
+    @testset "optimize_kf_nll wrapper with h_init warm start" begin
+        Random.seed!(55)
+        # h-coefficients chosen so q parameters are numerically well-separated
+        # and the NLL landscape is identifiable (R dominates measurement noise,
+        # q_wfm and q_rwfm differ by ~3 decades — avoids q_wfm/q_rwfm degeneracy)
+        h = Dict(2.0 => 1.0, 0.0 => 1e-2, -2.0 => 1e-6)
+        x = generate_composite_noise(h, 2^14, 1.0; seed=55)
+        res = optimize_kf_nll(x, 1.0; h_init=h, verbose=false)
+        @test res.converged
+        # Analytical warm-start targets (spec §3.3)
+        f_h = 0.5
+        q_wpm_exp  = h[2.0] * f_h / (2π^2)
+        q_wfm_exp  = h[0.0] / 2
+        q_rwfm_exp = (2π^2 / 3) * h[-2.0]
+        # With warm start + NLL refinement, results should land within ~1 decade
+        @test abs(log10(res.q_wpm)  - log10(q_wpm_exp))  < 1.0
+        @test abs(log10(res.q_wfm)  - log10(q_wfm_exp))  < 1.0
+        @test abs(log10(res.q_rwfm) - log10(q_rwfm_exp)) < 1.0
+    end
+
 end  # @testset "Kalman filter"

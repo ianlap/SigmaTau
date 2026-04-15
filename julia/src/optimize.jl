@@ -382,3 +382,38 @@ function optimize_kf(data::Vector{Float64}, cfg::OptimizeConfig)::OptimizeResult
     return OptimizeResult(q_wpm_opt, q_wfm_opt, q_rwfm_opt, q_irwfm_opt,
                           nll_opt, n_evals, converged)
 end
+
+"""
+    optimize_kf_nll(phase, τ₀; h_init=nothing, verbose=true, max_iter=500) → OptimizeResult
+
+High-level wrapper used by the ML dataset driver.  Optimizes
+`(q_wpm, q_wfm, q_rwfm)` in log10 space via Nelder-Mead on `_kf_nll_static`.
+If `h_init::Dict` is provided, uses the SP1065 analytical mapping h_α → q
+as the simplex centroid — drastically reduces iteration count.
+"""
+function optimize_kf_nll(phase::AbstractVector{<:Real}, τ₀::Real;
+                         h_init::Union{Nothing,AbstractDict{<:Real,<:Real}}=nothing,
+                         verbose::Bool = true,
+                         max_iter::Int = 500,
+                         tol::Float64  = 1e-6)
+    # Defaults cover the typical Rb range; overridden by h_init when supplied.
+    q_wpm0, q_wfm0, q_rwfm0 = 1e-26, 1e-25, 1e-26
+    if h_init !== nothing
+        f_h = 1.0 / (2τ₀)
+        haskey(h_init,  2.0) && (q_wpm0  = h_init[ 2.0] * f_h / (2π^2))
+        haskey(h_init,  0.0) && (q_wfm0  = h_init[ 0.0] / 2)
+        haskey(h_init, -2.0) && (q_rwfm0 = (2π^2 / 3) * h_init[-2.0])
+    end
+    cfg = OptimizeConfig(
+        q_wpm   = q_wpm0,
+        q_wfm   = q_wfm0,
+        q_rwfm  = q_rwfm0,
+        nstates = 3,
+        tau     = τ₀,
+        verbose = verbose,
+        max_iter = max_iter,
+        tol      = tol,
+        optimize_qwpm = (h_init === nothing),
+    )
+    return optimize_kf(Vector{Float64}(phase), cfg)
+end
