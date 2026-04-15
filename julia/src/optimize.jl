@@ -11,7 +11,7 @@
 # θ = {q_wfm, q_rwfm[, q_irwfm]} are optimized in log10-space via a
 # Nelder-Mead simplex (no external dependencies).  q_wpm (= R) is fixed.
 
-using LinearAlgebra: I
+using LinearAlgebra: I, norm
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -191,13 +191,9 @@ function _kf_nll(theta::Vector{Float64}, data::Vector{Float64},
     # Process noise Q — SP1065 continuous-time model, matches filter.jl build_Q!
     Q = _build_Q(ns, q_wfm, q_rwfm, q_irwfm, τ)
 
-    # LS initialization on first min(100, N-1) samples
-    n_fit = max(ns, min(_MAX_LS_SAMPLES, N - 1))
-    t_fit = Float64.(0:n_fit-1) .* τ
-    A_fit = _build_A(t_fit, ns)
-    x     = A_fit \ data[1:n_fit]
-
-    P   = _P0_SCALE .* Matrix{Float64}(I, ns, ns)
+    # Steady-state init
+    P = _dare_scalar_H(Φ, Q, R)
+    x = zeros(Float64, ns)
     nll = 0.0
 
     for k in 1:N
@@ -249,9 +245,68 @@ function _build_A(t::Vector{Float64}, ns::Int)
     return A
 end
 
-# ── Static fast-path NLL kernel (nstates == 3) ────────────────────────────────
-
 using StaticArrays: SMatrix, SVector, @SMatrix, @SVector
+
+# ── Steady-state Riccati (DARE) helpers ───────────────────────────────────────
+
+"""
+    _dare_scalar_H(Φ::AbstractMatrix, Q::AbstractMatrix, R::Real;
+                   tol=1e-12, max_iter=200) → Matrix{Float64}
+
+Steady-state (filtered) covariance P_{∞|∞} for the KF recursion with scalar
+observation H = [1 0 … 0]. Iterates the Riccati recursion until ‖ΔP‖/‖P‖ < tol.
+"""
+function _dare_scalar_H(Φ::AbstractMatrix, Q::AbstractMatrix, R::Real;
+                        tol::Float64 = 1e-12, max_iter::Int = 200)
+    n = size(Φ, 1)
+    P = Matrix{Float64}(Q)   # start from Q — any positive start converges
+    for _ in 1:max_iter
+        Pp = Φ * P * Φ' + Q
+        S  = Pp[1, 1] + R
+        S <= 0.0 && return P                 # degenerate — bail with last good P
+        K  = Pp[:, 1] ./ S                    # n×1
+        P_new = Pp .- K * Pp[1, :]'           # outer product
+        # Enforce symmetry (numerical hygiene)
+        P_new = 0.5 .* (P_new .+ P_new')
+        if norm(P_new .- P) / max(norm(P), 1e-30) < tol
+            return P_new
+        end
+        P = P_new
+    end
+    return P
+end
+
+"""
+    _dare_scalar_H_static(Φ::SMatrix{3,3}, Q::SMatrix{3,3}, R::Real;
+                          tol=1e-12, max_iter=200) → SMatrix{3,3,Float64}
+
+StaticArrays version of `_dare_scalar_H` for the nstates=3 fast path.
+"""
+function _dare_scalar_H_static(Φ::SMatrix{3,3,Float64}, Q::SMatrix{3,3,Float64}, R::Real;
+                               tol::Float64 = 1e-12, max_iter::Int = 200)
+    P = Q
+    @inbounds for _ in 1:max_iter
+        Pp = Φ * P * Φ' + Q
+        S  = Pp[1,1] + R
+        S <= 0.0 && return P
+        K  = SVector{3,Float64}(Pp[1,1]/S, Pp[2,1]/S, Pp[3,1]/S)
+        pr1 = SVector{3,Float64}(Pp[1,1], Pp[1,2], Pp[1,3])
+        P_new = Pp - K * pr1'
+        # Symmetrize
+        P_new = 0.5 * (P_new + P_new')
+        # Convergence check via Frobenius norm diff
+        diff = P_new - P
+        d2 = sum(diff .* diff)
+        n2 = max(sum(P .* P), 1e-60)
+        if sqrt(d2 / n2) < tol
+            return P_new
+        end
+        P = P_new
+    end
+    return P
+end
+
+# ── Static fast-path NLL kernel (nstates == 3) ────────────────────────────────
 
 """
     _kf_nll_static(theta, data, cfg) → Float64
@@ -289,14 +344,8 @@ function _kf_nll_static(theta::Vector{Float64}, data::Vector{Float64},
     Q33 = q_irwfm*τ
     Q   = @SMatrix [Q11 Q12 Q13; Q12 Q22 Q23; Q13 Q23 Q33]
 
-    # LS initialization — hoisted into static form
-    n_fit = max(3, min(_MAX_LS_SAMPLES, N - 1))
-    t_fit = Float64.(0:n_fit-1) .* τ
-    A     = hcat(ones(n_fit), t_fit, t_fit.^2 ./ 2)
-    xls   = A \ data[1:n_fit]
-    x     = SVector{3,Float64}(xls[1], xls[2], xls[3])
-
-    P   = SMatrix{3,3,Float64}(_P0_SCALE*I)
+    P = _dare_scalar_H_static(Φ, Q, R)
+    x = @SVector zeros(Float64, 3)
     nll = 0.0
 
     @inbounds for k in 1:N
@@ -413,7 +462,7 @@ function optimize_kf_nll(phase::AbstractVector{<:Real}, τ₀::Real;
         verbose = verbose,
         max_iter = max_iter,
         tol      = tol,
-        optimize_qwpm = (h_init === nothing),
+        optimize_qwpm = true,
     )
     return optimize_kf(Vector{Float64}(phase), cfg)
 end
