@@ -19,11 +19,11 @@ export draw_sample_params, run_one_sample, generate_dataset, SampleParams, Sampl
 # Ranges tightened to cover Rb / HSO / OCXO class (flicker floor 1e-14 to 1e-11);
 # do NOT extend to TCXOs (they'd dominate with WPM levels ≥ 1e-8 at τ=1).
 const _H_RANGES = Dict(
-     2.0 => (-20.0, -15.0),   # WPM  — σ_y(1) ∈ [1.9e-11, 6e-9]; Rb anchor -17.56
-     1.0 => (-26.0, -21.0),   # FPM  — no direct fit; proxy tightened around typical Rb/OCXO values
-     0.0 => (-24.0, -18.0),   # WFM  — σ_y(1) ∈ [7e-13, 7e-10]; Rb anchor -21.32
-    -1.0 => (-27.0, -22.0),   # FFM  — flicker floor ∈ [1e-14, 1e-11]; user target ~1e-12
-    -2.0 => (-32.0, -26.0),   # RWFM — capped at -26 so RWFM/WPM crossover stays at τ ≳ 10³ s even for lowest-WPM samples
+     2.0 => (-19.0, -16.0),   # WPM  — Rb anchor -17.2; ±1.5 dec spread; σ_y(1) ∈ [6e-11, 1.9e-9]
+     1.0 => (-28.0, -24.0),   # FPM  — no direct fit; proxy adjacent to WPM
+     0.0 => (-23.0, -20.0),   # WFM  — Rb anchor -21.3; ±1.5 dec spread around Rb WFM level
+    -1.0 => (-28.0, -25.0),   # FFM  — Rb inferred -26.4; ±1.5 dec; flicker floor ∈ [3.7e-15, 3.7e-13]
+    -2.0 => (-34.0, -28.0),   # RWFM — Rb near -30 (effectively zero); upper -28 gives modest visible rise
 )
 const _FPM_PROBABILITY = 0.30
 
