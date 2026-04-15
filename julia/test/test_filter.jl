@@ -151,4 +151,32 @@ using Statistics
     # ── Test 7: kf_optimize — skipped until optimize.jl lands in PR #13 ────────
     # @testset "kf_optimize finds finite optimal Q" — see PR #13
 
+    @testset "3-D NLL optimization recovers q_wpm on WPM+WFM data" begin
+        Random.seed!(99)
+        # Synthetic phase: WPM (R) + WFM (q_wfm), no drift
+        N = 4096; τ = 1.0
+        q_wpm_true = 0.25
+        q_wfm_true = 0.01
+        # Phase = random walk from WFM process noise, observed with WPM measurement noise
+        # Matches KF state-space model: phase(k) = phase(k-1) + ε, ε ~ N(0, q_wfm*τ)
+        phase_true = cumsum(sqrt(q_wfm_true * τ) .* randn(N))
+        ph = phase_true .+ sqrt(q_wpm_true) .* randn(N)
+
+        cfg = OptimizeConfig(
+            q_wpm   = 1.0,    # poor initial guess — force optimizer to work
+            q_wfm   = 0.1,
+            q_rwfm  = 1e-8,
+            nstates = 3,
+            tau     = τ,
+            verbose = false,
+            max_iter = 2000,
+            tol      = 1e-5,
+            optimize_qwpm = true,
+        )
+        res = optimize_kf(ph, cfg)
+        # Should recover within 1 decade (NLL landscape is smooth here)
+        @test abs(log10(res.q_wpm) - log10(q_wpm_true)) < 1.0
+        @test abs(log10(res.q_wfm) - log10(q_wfm_true)) < 1.0
+    end
+
 end  # @testset "Kalman filter"

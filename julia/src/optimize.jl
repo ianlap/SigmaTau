@@ -33,12 +33,13 @@ Base.@kwdef struct OptimizeConfig
     q_wpm::Float64   = 100.0   # Measurement noise variance R (fixed)
     q_wfm::Float64   = 0.01    # Initial WFM guess
     q_rwfm::Float64  = 1e-6    # Initial RWFM guess
-    q_irwfm::Float64 = 0.0     # Initial IRWFM guess (0 = not optimized)
-    nstates::Int     = 3       # KF state dimension: 2 or 3
-    tau::Float64     = 1.0     # Sampling interval [s]
-    verbose::Bool    = true    # Print progress
-    max_iter::Int    = 500     # Max Nelder-Mead iterations
-    tol::Float64     = 1e-6   # Convergence tolerance (std of simplex f-values)
+    q_irwfm::Float64    = 0.0     # Initial IRWFM guess (0 = not optimized)
+    nstates::Int        = 3       # KF state dimension: 2 or 3
+    tau::Float64        = 1.0     # Sampling interval [s]
+    verbose::Bool       = true    # Print progress
+    max_iter::Int       = 500     # Max Nelder-Mead iterations
+    tol::Float64        = 1e-6    # Convergence tolerance (std of simplex f-values)
+    optimize_qwpm::Bool = false   # If true, walk log10(q_wpm) too
 end
 
 """
@@ -168,11 +169,16 @@ function _kf_nll(theta::Vector{Float64}, data::Vector{Float64},
     N   = length(data)
     ns  = cfg.nstates
     τ   = cfg.tau
-    R   = cfg.q_wpm
 
-    q_wfm   = 10.0^theta[1]
-    q_rwfm  = 10.0^theta[2]
-    q_irwfm = length(theta) >= 3 ? 10.0^theta[3] : 0.0
+    # Unpack theta — layout depends on cfg.optimize_qwpm and cfg.q_irwfm
+    idx = 1
+    R = cfg.q_wpm
+    if cfg.optimize_qwpm
+        R = 10.0^theta[idx]; idx += 1
+    end
+    q_wfm   = 10.0^theta[idx]; idx += 1
+    q_rwfm  = 10.0^theta[idx]; idx += 1
+    q_irwfm = length(theta) >= idx ? 10.0^theta[idx] : 0.0
 
     # State-transition Φ — matches filter.jl build_phi!
     Φ = Matrix{Float64}(I, ns, ns)
@@ -264,14 +270,17 @@ function optimize_kf(data::Vector{Float64}, cfg::OptimizeConfig)::OptimizeResult
 
     if cfg.verbose
         println("\n=== KF NLL OPTIMIZATION (Nelder-Mead) ===")
-        println("  q_wpm   = $(round(cfg.q_wpm,   sigdigits=3))  (fixed, R)")
+        println("  q_wpm   = $(round(cfg.q_wpm,   sigdigits=3))  ($(cfg.optimize_qwpm ? "initial guess" : "fixed"), R)")
         println("  q_wfm0  = $(round(cfg.q_wfm,   sigdigits=3))")
         println("  q_rwfm0 = $(round(cfg.q_rwfm,  sigdigits=3))")
         cfg.q_irwfm > 0 && println("  q_irwfm0= $(round(cfg.q_irwfm, sigdigits=3))")
     end
 
     # Initial guess in log10 space
-    theta0 = [log10(cfg.q_wfm), log10(cfg.q_rwfm)]
+    theta0 = Float64[]
+    cfg.optimize_qwpm && push!(theta0, log10(cfg.q_wpm))
+    push!(theta0, log10(cfg.q_wfm))
+    push!(theta0, log10(cfg.q_rwfm))
     cfg.q_irwfm > 0 && push!(theta0, log10(cfg.q_irwfm))
 
     obj = th -> _kf_nll(th, data, cfg)
@@ -279,17 +288,23 @@ function optimize_kf(data::Vector{Float64}, cfg::OptimizeConfig)::OptimizeResult
     theta_opt, nll_opt, n_evals, converged =
         _nelder_mead(obj, theta0; max_iter = cfg.max_iter, tol = cfg.tol)
 
-    q_wfm_opt   = 10.0^theta_opt[1]
-    q_rwfm_opt  = 10.0^theta_opt[2]
-    q_irwfm_opt = length(theta_opt) >= 3 ? 10.0^theta_opt[3] : 0.0
+    idx = 1
+    q_wpm_opt = cfg.q_wpm
+    if cfg.optimize_qwpm
+        q_wpm_opt = 10.0^theta_opt[idx]; idx += 1
+    end
+    q_wfm_opt   = 10.0^theta_opt[idx]; idx += 1
+    q_rwfm_opt  = 10.0^theta_opt[idx]; idx += 1
+    q_irwfm_opt = length(theta_opt) >= idx ? 10.0^theta_opt[idx] : 0.0
 
     if cfg.verbose
         println("  NLL = $(round(nll_opt, sigdigits=6))  ($n_evals evals)")
+        cfg.optimize_qwpm && println("  q_wpm   = $(round(q_wpm_opt,   sigdigits=3))")
         println("  q_wfm   = $(round(q_wfm_opt,   sigdigits=3))")
         println("  q_rwfm  = $(round(q_rwfm_opt,  sigdigits=3))")
         q_irwfm_opt > 0 && println("  q_irwfm = $(round(q_irwfm_opt, sigdigits=3))")
     end
 
-    return OptimizeResult(cfg.q_wpm, q_wfm_opt, q_rwfm_opt, q_irwfm_opt,
+    return OptimizeResult(q_wpm_opt, q_wfm_opt, q_rwfm_opt, q_irwfm_opt,
                           nll_opt, n_evals, converged)
 end
