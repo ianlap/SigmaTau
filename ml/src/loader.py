@@ -32,6 +32,16 @@ class Dataset:
     taus: np.ndarray             # (20,)    float64
 
 
+def _maybe_transpose(arr: np.ndarray, expected_inner: int) -> np.ndarray:
+    """Julia HDF5.jl writes column-major; h5py reads row-major. For a Julia
+    Matrix(n_samples, n_inner) with n_inner small (e.g. 196 features, 3 q-labels,
+    5 h-coeffs), h5py sees it as (n_inner, n_samples). Detect and transpose
+    when the leading dimension matches `expected_inner`."""
+    if arr.ndim == 2 and arr.shape[0] == expected_inner and arr.shape[1] != expected_inner:
+        return arr.T
+    return arr
+
+
 def load_dataset(path: str | Path, filter_unconverged: bool = True) -> Dataset:
     """Load an HDF5 dataset and optionally drop samples that didn't converge."""
     with h5py.File(str(path), "r") as f:
@@ -52,6 +62,11 @@ def load_dataset(path: str | Path, filter_unconverged: bool = True) -> Dataset:
         )
     else:
         feature_names = feat_names_b.astype(str)
+
+    # Correct for Julia → h5py axis-order swap on matrices
+    X = _maybe_transpose(X, expected_inner=len(feature_names))   # (n, 196)
+    y = _maybe_transpose(y, expected_inner=3)                     # (n, 3)
+    h = _maybe_transpose(h, expected_inner=5)                     # (n, 5)
 
     ds = Dataset(
         X=X.astype(np.float32),
