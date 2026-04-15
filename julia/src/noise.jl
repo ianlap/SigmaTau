@@ -101,6 +101,7 @@ function _noise_id_lag1acf(x::Vector{Float64}, m::Int, data_type::String,
         if d >= dmin && (rho < 0.25 || d >= dmax)
             p       = -2 * (rho + d)
             alpha   = p + 2 * (lowercase(data_type) == "phase" ? 1 : 0)
+            isnan(alpha) && return (NaN, 0, d, rho)
             return (alpha, round(Int, alpha), d, rho)
         end
 
