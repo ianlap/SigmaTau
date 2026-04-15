@@ -217,17 +217,22 @@ After reading two papers, the project's framing needs sharpening.
 - Their Table 1: q1=4.7×10⁻¹⁶ (WPM), q2=1.23×10⁻¹⁸ (WFM), q3=1.68×10⁻²⁰ (RWFM), **R=1.86×10⁻¹⁴**
 - Validates by **clock-difference RMS** after disciplining (2.568 ns)
 
-Key revelation: **Liu has 4 parameters (q1, q2, q3, R), we have 3 (we conflated R with q_wpm).**
+**[CORRECTED 2026-04-15]** Earlier worry that Liu has 4 params and we
+have 3 was based on misreading Liu's Table 1. In Liu's Q matrix, `q1·τ`
+in Q[1,1] has the τ⁻¹ Allan slope → that's **WFM**, not WPM. Liu's
+labels (q1, q2, q3, R) correspond 1:1 to our (q_wfm, q_rwfm, q_irwfm, R),
+where our name `q_wpm` is the measurement noise R slot.
 
-In Liu's Q matrix, q1 enters as the leading `q1·τ` term in Q[1,1] — it's
-the **state** white phase noise (intrinsic oscillator). R is **measurement**
-noise (TIC instrument noise). They have very different sources and ALS
-separates them.
+Zucca-Tavella 2005 (Eq 1, Eq 36) confirms: the canonical 3-state clock
+SDE has NO state-level WPM — σ₁ is WFM diffusion, σ₂ is RWFM, σ₃ is
+drift RW. WPM appears only as measurement noise R. Wu 2023 Eq 5 agrees:
+`σ_y²(τ) = 3R/τ² + σ₁²/τ + σ₂²τ/3`. **Our physics was already correct;
+the only issue was the internal name `q_wpm` for what is mathematically R.**
 
-In our Q matrix, Q11 = `q_wfm·τ + q_rwfm·τ³/3 + q_irwfm·τ⁵/20` — there is
-**no separate state-WPM term**. Our `q_wpm` is just R; we conflated it
-with the intrinsic WPM contribution. Off by one in naming, missing a
-parameter physically.
+Ian's practice (confirmed): fit 3 params — WPM (= R), WFM, RWFM. The 4th
+(drift RW / IRWFM / σ₃²) requires datasets longer than we have; Kubczak
+2019 Fig 3–4 also shows 3-state is MSE-optimal for Rb. **Do not add σ₃²
+to the optimization.**
 
 ### Paper 2: Åkesson et al. 2008 (J. Process Control)
 
@@ -279,26 +284,33 @@ Better baselines to add:
 
 ---
 
-## 6. The 4-parameter refactor (proposed but not started)
+## 6. Parameter count — DECIDED: stay with 3 (WPM/WFM/RWFM)
 
-To match Liu's framework and address §5 point 1:
+Earlier draft proposed a Liu-style 4-parameter refactor adding R as a
+separate measurement-noise parameter alongside (q_wpm, q_wfm, q_rwfm).
+**Direction reversed by user.** The drift random walk (σ₃² in some
+papers) is unobservable on available datasets — Ian's standard practice
+fits 3 parameters only. Do not propose 4-param KF.
 
-**Generator:**
-- Add independent measurement noise: `phase_observed = phase_oscillator + N(0, R)`
-- Draw `R` from log-uniform, e.g. log10(R) ∈ [-22, -19] (ps to ns TIC range)
+**What this means for the ML pipeline:**
 
-**Julia KF (`OptimizeConfig`, `_build_Q`, `_kf_nll[_static]`, `optimize_kf_nll`):**
-- Add `R::Float64` field separate from `q_wpm`
-- Add `q_wpm·τ` term to Q[1,1] (currently absent)
-- Update analytical h-warm-start formulas
-- Optimize 4 parameters in log10 space (was 3)
+- Target dimension stays at 3
+- Don't add separate R to generator or KF
+- Current `q_wpm` continues to play the dual role of "intrinsic WPM +
+  measurement noise" (they're inseparable on our synthetic data anyway,
+  since we don't generate independent TIC noise)
+- The label-noise problem in §5 (NLL has 14-decade spread for
+  near-zero q_rwfm) is a real concern, but the fix is cleaner labels
+  (h targets, or ALS), not more parameters
 
-**Labels:** become 4-D `(R, q_wpm_state, q_wfm, q_rwfm)`.
+**Open framing question for evaluation:** with 3 params and the
+acknowledged RWFM-unobservability, the model should be honest about
+what it can/can't predict. q_rwfm predictions on real Rb are
+fundamentally limited by what's in the data. May want to:
 
-**ML pipeline:** target dimension changes 3 → 4. Otherwise identical.
-
-**Cost:** ~2-3 hours Julia, ~21 min to regenerate dataset, retrain
-notebook.
+- Skip q_rwfm as a learnable target (predict only q_wpm and q_wfm)
+- Or predict q_rwfm but report wide uncertainty (XGB quantile intervals
+  will likely show this naturally)
 
 ---
 
@@ -324,45 +336,73 @@ Probably out of scope for PH 551 timeline.
 
 ## 8. Recommended next-step ordering
 
-When the running notebook finishes (~10-15 more min):
+Notebook execution status: **RF GridSearchCV finished** (`models/rf_best.joblib`,
+246 MB), **XGB GridSearchCV timed out** at 1 hour (the `--ExecutePreprocessor.timeout=3600`
+limit). Only EDA figures landed (`figures/eda_distributions.png`,
+`eda_example_curves.png`, `eda_corr_feature_target.png`); rubric plots
+not generated yet.
 
-1. **Inspect baseline results** (current 3-q-target notebook):
-   - Per-target RMSE for naive / RF / XGB
-   - Predicted-vs-actual scatter quality
-   - Importance ranking
-   - Real-data overlay (4 windows)
+Next:
 
-2. **Pivot to h-targets first** (cheapest improvement):
+1. **Reduce XGB grid + re-run only the failed cells** (or skip XGB entirely
+   if RF is sufficient). Options:
+   - Drop GridSearchCV for XGB and use a single hand-picked config
+     (`n_estimators=300, max_depth=6, learning_rate=0.05`)
+   - Or shrink grid to 6-8 combos with smaller `n_estimators` cap
+   - Either way, rerun just from the XGB cell forward (notebook supports this)
+
+2. **Inspect RF results** that did complete:
+   - Load `models/rf_best.joblib`, predict on test set, print
+     `metrics_per_target` for each of (q_wpm, q_wfm, q_rwfm)
+   - Eyeball EDA figures already on disk
+
+3. **Pivot to h-targets** (cheapest improvement):
    - Modify notebook to use `ds.h_coeffs[:, [0, 2, 3, 4]]` as targets
-   - Skip h_+1 (NaN for non-FPM samples) or handle it with an indicator feature
-   - Re-run training. Should see significant R² jump because labels are noiseless.
+     (h_+2, h_0, h_-1, h_-2; skip h_+1 which has NaN for non-FPM samples
+     or handle it with an indicator feature)
+   - Re-run training. Should see significant R² jump because labels
+     are noiseless ground truth (no NLL identifiability spread)
 
-3. **Then 4-parameter refactor** (Liu-style):
-   - Add R to generator + KF + labels
-   - Retrain with 4 targets
-   - Validate by downstream filter performance (innovation RMS) on real data
-
-4. **Optional: implement linear ALS in Julia**:
+4. **Optional: implement linear ALS in Julia** as the gold-standard
+   competitor for evaluation:
    - Liu's Eq 23 (unconstrained LS) is ~100 lines
-   - Use as: (a) alternative label generator for synthetic, (b) ground-truth on real GMR
+   - Use as: (a) alternative label generator for synthetic, (b) ground
+     truth on real GMR
 
 5. **Optional: smaller window for more real-data validation**:
-   - Regenerate at N=2¹⁷ → 22 real-data windows
+   - Regenerate at N=2¹⁷ → 22 real-data windows (was 5)
    - Probably do AFTER the h-target pivot to avoid mixing changes
+
+6. **Possibly: drop q_rwfm as a learnable target** (per §6 framing
+   question) since RWFM is unobservable on Rb and labels are noisy
 
 ---
 
 ## 9. References
 
 - Riley & Howe, "Handbook of Frequency Stability Analysis," NIST SP1065, 2008
-  (`docs/papers/sp1065.pdf`)
+  (`docs/papers/reference/sp1065.pdf`)
 - Banerjee & Matsakis, *A Concise Introduction to Quantum Mechanics for Time and Frequency Metrology* (2023)
-  (`docs/papers/2023_banerjee_matsakis_timekeeping_book.pdf`)
+  (`docs/papers/reference/2023_banerjee_matsakis_timekeeping_book.pdf`)
 - Kasdin, J., "Discrete simulation of colored noise…", Proc. IEEE 1995
 - **Liu et al. 2024**, "Disciplining a Rubidium Atomic Clock Based on Adaptive Kalman Filter," Sensors 24, 4495
-  (`ml/sensors-24-04495.pdf`)
+  (`docs/papers/state_estimation/2024_liu_adaptive_kf_rubidium_sensors.pdf`)
 - **Åkesson et al. 2008**, "A generalized autocovariance least-squares method for Kalman filter tuning," J. Process Control 18, 769
-  (`ml/1-s2.0-S0959152407001631-main.pdf`)
+  (`docs/papers/state_estimation/2008_akesson_generalized_als_kf_tuning_jprocontrol.pdf`)
+- **Zucca & Tavella 2005**, "The Clock Model and Its Relationship with the Allan and Related Variances," IEEE UFFC
+  (`docs/papers/state_estimation/2005_zucca_tavella_clock_model_allan_ieee_uffc.pdf`) — **direct bridge q_i ↔ σ_y(τ)**
+- **Tryon & Jones 1983**, "Estimation of Parameters in Models for Cesium Beam Atomic Clocks," J. Res. NBS 88(1)
+  (`docs/papers/state_estimation/1983_tryon_jones_parameter_estimation_cesium_jres.pdf`)
+- **Wu 2023**, "Determination of Theoretical KF Performance for Atomic Clock Estimation Through Equivalent LTI Systems," IEEE T-AES
+  (`docs/papers/state_estimation/2023_wu_kf_performance_lti_atomic_clock_ieee_taes.pdf`)
+- **Kubczak et al. 2019**, "Kalman Filter Design for Fast Synchronization of a High-Stability Rubidium Oscillator," IEEE SPA
+  (`docs/papers/state_estimation/2019_kubczak_kf_fast_sync_rubidium_ieee_spa.pdf`)
+- **Zucca & Tavella 2015**, "A mathematical model for the atomic clock error in case of jumps," arXiv:1506.01080
+  (`docs/papers/state_estimation/2015_zucca_tavella_clock_error_jumps_arxiv.pdf`)
+- **Yan et al. 2023**, "Structured Kalman Filter for Time Scale Generation in Atomic Clock Ensembles," IEEE CSL
+  (`docs/papers/state_estimation/2023_yan_structured_kf_timescale_ieee_csl.pdf`)
+- **Breakiron 2001**, "A Kalman Filter for Atomic Clocks and Timescales," PTTI 33
+  (`docs/papers/state_estimation/2001_breakiron_kf_atomic_clocks_timescales_ptti.pdf`)
 - GMR Series HSO Options datasheet
   (`ml/GMR-Series-HSO-Options.pdf`)
 
