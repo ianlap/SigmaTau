@@ -1,0 +1,4 @@
+# Generated dataset artifacts — do not commit
+*.npz
+*.png
+*.txt
