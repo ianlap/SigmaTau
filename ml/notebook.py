@@ -25,14 +25,20 @@ import seaborn as sns
 from pathlib import Path
 
 from ml.src.loader import load_dataset, stratified_split, impute_median
-from ml.src.models import train_rf, train_xgb, predict
+from ml.src.models import predict
 from ml.src.evaluation import metrics_per_target, rf_prediction_variance, xgb_quantile_intervals, coverage
 
 sns.set_theme(context="talk", style="whitegrid")
 np.random.seed(42)
 
-# Switch between dev fixture (25 samples) and full production dataset
-DATA_PATH = "data/dataset_v1.h5" if Path("data/dataset_v1.h5").exists() else "data/dev_25.h5"
+# Switch between fixtures and full production dataset (prefers bigger)
+for candidate in ("data/dataset_v1.h5", "data/dev_100.h5", "data/dev_25.h5"):
+    if Path(candidate).exists():
+        DATA_PATH = candidate
+        break
+else:
+    raise FileNotFoundError("No dataset HDF5 found; run ml/dataset/run_test_dataset.jl first")
+
 FIG_DIR = Path("figures")
 FIG_DIR.mkdir(exist_ok=True)
 MODEL_DIR = Path("models")
@@ -141,59 +147,75 @@ print(metrics_per_target(yte, y_naive))
 # ## 3. Random Forest + XGBoost — tuning
 
 # %%
-# NOTE: takes ~30 min on 12 cores. Reduce grid or skip on dev fixture.
-if ds.X.shape[0] >= 1000:
-    from sklearn.model_selection import GridSearchCV
-    from sklearn.ensemble import RandomForestRegressor
-    import joblib
+# Adaptive GridSearchCV: on tiny fixtures use a reduced grid + fewer folds
+# so the same code runs end-to-end on 25 or 10000 samples.
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestRegressor
+import joblib
 
+n_train = Xtr.shape[0]
+cv_folds = max(2, min(5, n_train // 10))  # at least 2-fold, at most 5-fold
+is_big = n_train >= 1000
+
+if is_big:
     rf_grid = {
         "n_estimators":     [200, 500, 1000],
         "max_depth":        [None, 20, 30],
         "min_samples_leaf": [3, 5, 10],
         "max_features":     ["sqrt", 0.5],
     }
-    rf_gs = GridSearchCV(
-        RandomForestRegressor(random_state=42, n_jobs=1),
-        rf_grid, cv=5, scoring="neg_mean_squared_error",
-        n_jobs=-1, verbose=2,
-    )
-    rf_gs.fit(Xtr, ytr)
-    print("best RF params:", rf_gs.best_params_)
-    joblib.dump(rf_gs.best_estimator_, MODEL_DIR / "rf_best.joblib")
-    rf = rf_gs.best_estimator_
 else:
-    print(f"Skipping GridSearchCV on tiny fixture (n={ds.X.shape[0]}); fitting default RF")
-    rf = train_rf(Xtr, ytr, n_estimators=100, max_depth=None, min_samples_leaf=2)
+    # Reduced grid for small fixtures — still exercises the methodology
+    rf_grid = {
+        "n_estimators":     [50, 100],
+        "max_depth":        [None, 10],
+        "min_samples_leaf": [1, 2],
+        "max_features":     ["sqrt"],
+    }
+
+print(f"RF GridSearchCV: n_train={n_train}, cv={cv_folds}, grid_size={np.prod([len(v) for v in rf_grid.values()])}")
+rf_gs = GridSearchCV(
+    RandomForestRegressor(random_state=42, n_jobs=1),
+    rf_grid, cv=cv_folds, scoring="neg_mean_squared_error",
+    n_jobs=-1, verbose=1,
+)
+rf_gs.fit(Xtr, ytr)
+print("best RF params:", rf_gs.best_params_)
+joblib.dump(rf_gs.best_estimator_, MODEL_DIR / "rf_best.joblib")
+rf = rf_gs.best_estimator_
 
 # %%
-if ds.X.shape[0] >= 1000:
-    from sklearn.model_selection import GridSearchCV
-    from sklearn.multioutput import MultiOutputRegressor
-    import xgboost as xgb
-    import joblib
+from sklearn.multioutput import MultiOutputRegressor
+import xgboost as xgb
 
+if is_big:
     xgb_grid = {
         "estimator__n_estimators":  [200, 500],
         "estimator__learning_rate": [0.01, 0.05, 0.1],
         "estimator__max_depth":     [4, 6, 8],
         "estimator__subsample":     [0.8, 1.0],
     }
-    xgb_base = MultiOutputRegressor(
-        xgb.XGBRegressor(random_state=42, tree_method="hist", n_jobs=-1),
-        n_jobs=1,
-    )
-    xgb_gs = GridSearchCV(
-        xgb_base, xgb_grid, cv=5, scoring="neg_mean_squared_error",
-        n_jobs=2, verbose=2,
-    )
-    xgb_gs.fit(Xtr, ytr)
-    print("best XGB params:", xgb_gs.best_params_)
-    joblib.dump(xgb_gs.best_estimator_, MODEL_DIR / "xgb_best.joblib")
-    xgb_m = xgb_gs.best_estimator_
 else:
-    print(f"Skipping GridSearchCV on tiny fixture; fitting default XGB")
-    xgb_m = train_xgb(Xtr, ytr, n_estimators=100)
+    xgb_grid = {
+        "estimator__n_estimators":  [50, 100],
+        "estimator__learning_rate": [0.05, 0.1],
+        "estimator__max_depth":     [3, 5],
+        "estimator__subsample":     [1.0],
+    }
+
+print(f"XGB GridSearchCV: n_train={n_train}, cv={cv_folds}, grid_size={np.prod([len(v) for v in xgb_grid.values()])}")
+xgb_base = MultiOutputRegressor(
+    xgb.XGBRegressor(random_state=42, tree_method="hist", n_jobs=-1),
+    n_jobs=1,
+)
+xgb_gs = GridSearchCV(
+    xgb_base, xgb_grid, cv=cv_folds, scoring="neg_mean_squared_error",
+    n_jobs=2, verbose=1,
+)
+xgb_gs.fit(Xtr, ytr)
+print("best XGB params:", xgb_gs.best_params_)
+joblib.dump(xgb_gs.best_estimator_, MODEL_DIR / "xgb_best.joblib")
+xgb_m = xgb_gs.best_estimator_
 
 # %% [markdown]
 # ## 4. Evaluation
@@ -294,15 +316,18 @@ fig.savefig(FIG_DIR / "rf_uq.png", dpi=150)
 plt.show()
 
 # %%
-# One-time fit of 6 extra XGB models (2 quantiles × 3 targets); ~2 min on production data
-if ds.X.shape[0] >= 1000:
-    lo, hi = xgb_quantile_intervals(Xtr, ytr, Xte)
-    cov = coverage(yte, lo, hi)
-    print("XGB 90% prediction-interval empirical coverage per target:")
-    for name, c in zip(target_names, cov):
-        print(f"  {name}: {c:.3f}")
-else:
-    print(f"Skipping quantile fit on tiny fixture")
+# Fit 6 quantile XGB models (2 quantiles × 3 targets). On small fixtures use
+# reduced n_estimators so the cell stays fast.
+qxgb_n = 300 if is_big else 100
+qxgb_depth = 6 if is_big else 4
+lo, hi = xgb_quantile_intervals(
+    Xtr, ytr, Xte,
+    n_estimators=qxgb_n, max_depth=qxgb_depth,
+)
+cov = coverage(yte, lo, hi)
+print("XGB 90% prediction-interval empirical coverage per target:")
+for name, c in zip(target_names, cov):
+    print(f"  {name}: {c:.3f}")
 
 # %% [markdown]
 # ## 6. Model comparison
