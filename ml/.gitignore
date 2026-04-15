@@ -1,0 +1,13 @@
+data/dataset_v1.h5
+data/dataset_v1.h5.checkpoint.h5
+data/dataset_v1.log
+data/dev_25*
+data/real_data_fit*
+figures/
+models/
+*.joblib
+.venv/
+.ipynb_checkpoints/
+__pycache__/
+.pytest_cache/
+*.pyc
