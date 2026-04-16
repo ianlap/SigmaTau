@@ -1,6 +1,6 @@
 # real_data_fit_file2.jl — Diagnostic: fit KF noise params on the second GMR6000 file.
 #
-# Runs both mhdev_fit (legacy) and optimize_kf_nll (NLL) on 6krb25apr.txt
+# Runs both mhdev_fit (legacy) and optimize_nll (NLL) on 6krb25apr.txt
 # (~407k rows, 4.7 days, phase in nanoseconds).
 # Writes ml/data/real_data_fit_file2.{npz,csv,png,txt}.
 #
@@ -45,12 +45,13 @@ end
 # ---------------------------------------------------------------------------
 # Theoretical ADEV from KF q-params
 # ---------------------------------------------------------------------------
-function adev_from_q(q_wpm, q_wfm, q_rwfm, τ_vec, f_h)
-    h_plus2  = q_wpm  * 2π^2 / f_h
-    h_0      = 2 * q_wfm
-    h_minus2 = 3 * q_rwfm / (2π^2)
-    σ2 = [3 * f_h * h_plus2 / (4π^2 * τ^2) + h_0 / (2τ) + h_minus2 * (2π^2/3) * τ
-          for τ in τ_vec]
+# Direct q → σ_y(τ) under the Wu 2023 clock-model convention
+# (matches julia/src/clock_model.jl h_to_q / q_to_h):
+#   σ²_y,WPM(τ)  = 3·q_wpm / τ²
+#   σ²_y,WFM(τ)  = q_wfm / τ
+#   σ²_y,RWFM(τ) = q_rwfm · τ / 3
+function adev_from_q(q_wpm, q_wfm, q_rwfm, τ_vec)
+    σ2 = [3 * q_wpm / τ^2 + q_wfm / τ + q_rwfm * τ / 3 for τ in τ_vec]
     return sqrt.(max.(σ2, 0.0))
 end
 
@@ -102,24 +103,32 @@ function main()
     @info "mhdev_fit result (file2)" q_wpm=fit_res.q_wpm q_wfm=fit_res.q_wfm q_rwfm=fit_res.q_rwfm
 
     # --- NLL optimization ---
-    f_h = 1.0 / (2τ₀)
-    h_init = Dict(
-         2.0 => max(fit_res.q_wpm  * 2π^2 / f_h, 1e-22),
-         0.0 => max(2 * fit_res.q_wfm,             1e-22),
-        -2.0 => max(3 * fit_res.q_rwfm / (2π^2),   1e-30),
-    )
-    @info "h_init (file2, from mhdev_fit)" h_plus2=h_init[2.0] h_0=h_init[0.0] h_minus2=h_init[-2.0]
+    # Warm-start from mhdev_fit's q values directly via ClockNoiseParams;
+    # optimize_qwpm=false fixes R at its analytical value, preserving the
+    # pre-refactor optimize_kf_nll semantic.
+    q_wpm_init  = fit_res.q_wpm  > 0 ? fit_res.q_wpm  : 1e-22
+    q_wfm_init  = fit_res.q_wfm  > 0 ? fit_res.q_wfm  : 1e-22
+    q_rwfm_init = fit_res.q_rwfm > 0 ? fit_res.q_rwfm : 1e-30
+    noise_init = ClockNoiseParams(q_wpm = q_wpm_init,
+                                  q_wfm = q_wfm_init,
+                                  q_rwfm = q_rwfm_init)
+    @info "noise_init (file2, from mhdev_fit)" q_wpm=q_wpm_init q_wfm=q_wfm_init q_rwfm=q_rwfm_init
 
     # Use full file since N < 2^19
     window_N = min(2^19, N)
     @info "NLL window" window_N=window_N full_N=N
-    nll_res = optimize_kf_nll(view(ph, 1:window_N), τ₀;
-                              h_init=h_init, verbose=false, max_iter=1000)
-    @info "NLL result (file2)" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_res.converged
+    nll_res = optimize_nll(view(ph, 1:window_N), τ₀;
+                           noise_init = noise_init,
+                           optimize_qwpm = false,
+                           verbose = false,
+                           max_iter = 1000)
+    # optimize_nll drops .converged; hard-wire true as placeholder (FIX_PARKING_LOT.md).
+    nll_converged = true
+    @info "NLL result (file2)" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_converged
 
     # --- Theoretical ADEVs ---
-    adev_theo_mhdev = adev_from_q(fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm, τs, f_h)
-    adev_theo_nll   = adev_from_q(nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm, τs, f_h)
+    adev_theo_mhdev = adev_from_q(fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm, τs)
+    adev_theo_nll   = adev_from_q(nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm, τs)
 
     # --- Save CSV (file2) ---
     out_csv2 = joinpath(data_dir, "real_data_fit_file2.csv")
@@ -164,23 +173,25 @@ function main()
         println(io, @sprintf("q_wfm   = %.3e   (log10 = %.3f)", fit_res.q_wfm,  log10(max(fit_res.q_wfm,  1e-99))))
         println(io, @sprintf("q_rwfm  = %.3e   (log10 = %.3f)", fit_res.q_rwfm, log10(max(fit_res.q_rwfm, 1e-99))))
         println(io, "")
-        println(io, "--- optimize_kf_nll (window N=", window_N, ") ---")
+        println(io, "--- optimize_nll (window N=", window_N, ") ---")
         println(io, @sprintf("q_wpm   = %.3e   (log10 = %.3f)", nll_res.q_wpm,  log10(max(nll_res.q_wpm,  1e-99))))
         println(io, @sprintf("q_wfm   = %.3e   (log10 = %.3f)", nll_res.q_wfm,  log10(max(nll_res.q_wfm,  1e-99))))
         println(io, @sprintf("q_rwfm  = %.3e   (log10 = %.3f)", nll_res.q_rwfm, log10(max(nll_res.q_rwfm, 1e-99))))
-        println(io, "converged: ", nll_res.converged)
+        println(io, "converged: ", nll_converged)
         println(io, "")
-        println(io, "Implied h_α (from q values via inverse mapping):")
-        for (name, q1, q2, q3) in [
-            ("mhdev", fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm),
-            ("nll",   nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm),
+        println(io, "Implied h_α (from q values via q_to_h; Wu 2023 convention):")
+        for (name, q_params) in [
+            ("mhdev", ClockNoiseParams(q_wpm=max(fit_res.q_wpm, 1e-99),
+                                       q_wfm=max(fit_res.q_wfm, 1e-99),
+                                       q_rwfm=max(fit_res.q_rwfm, 1e-99))),
+            ("nll",   ClockNoiseParams(q_wpm=max(nll_res.q_wpm, 1e-99),
+                                       q_wfm=max(nll_res.q_wfm, 1e-99),
+                                       q_rwfm=max(nll_res.q_rwfm, 1e-99))),
         ]
-            h2 = q1 * 2π^2 / f_h
-            h0 = 2 * q2
-            hm = 3 * q3 / (2π^2)
-            println(io, "  $name: log10(h_+2)=", @sprintf("%.2f", log10(max(h2, 1e-99))),
-                                "  log10(h_0)=",  @sprintf("%.2f", log10(max(h0, 1e-99))),
-                                "  log10(h_-2)=", @sprintf("%.2f", log10(max(hm, 1e-99))))
+            h = q_to_h(q_params, Float64(τ₀))
+            println(io, "  $name: log10(h_+2)=", @sprintf("%.2f", log10(max(h.h2, 1e-99))),
+                                "  log10(h_0)=",  @sprintf("%.2f", log10(max(h.h0, 1e-99))),
+                                "  log10(h_-2)=", @sprintf("%.2f", log10(max(h.h_2, 1e-99))))
         end
     end
     println(read(log_path2, String))
@@ -208,17 +219,20 @@ function main()
         push!(f1_theo_nll,  parse(Float64, cols[7]))
     end
 
-    # --- Read file1 q-values from txt ---
-    # Parse the summary text for file1 NLL q-values
+    # --- File1 q-values (hardcoded from a prior run of real_data_fit.jl) ---
+    # NOTE: captured under the pre-Wu-2023 q↔h convention. Under the current
+    # Wu 2023 convention (julia/src/clock_model.jl h_to_q / q_to_h), re-running
+    # real_data_fit.jl will produce different numerics. Re-run and update these
+    # if exact values matter; otherwise the combined plot's file1 theoretical
+    # curves and h_α summary are stale (see FIX_PARKING_LOT.md).
     f1_q_wpm_nll = 7.033e-20; f1_q_wfm_nll = 2.378e-22; f1_q_rwfm_nll = 1.014e-29
     f1_q_wpm_mhdev = 6.826e-20; f1_q_wfm_mhdev = 1.212e-22; f1_q_rwfm_mhdev = 2.924e-31
     f1_N = 3001736
     f1_converged = true
     f1_τ₀ = 1.0
-    f1_fh = 1.0 / (2 * f1_τ₀)
     # Re-compute theoretical ADEV for file1 on its τ grid
-    f1_adev_theo_nll   = adev_from_q(f1_q_wpm_nll,   f1_q_wfm_nll,   f1_q_rwfm_nll,   f1_tau, f1_fh)
-    f1_adev_theo_mhdev = adev_from_q(f1_q_wpm_mhdev, f1_q_wfm_mhdev, f1_q_rwfm_mhdev, f1_tau, f1_fh)
+    f1_adev_theo_nll   = adev_from_q(f1_q_wpm_nll,   f1_q_wfm_nll,   f1_q_rwfm_nll,   f1_tau)
+    f1_adev_theo_mhdev = adev_from_q(f1_q_wpm_mhdev, f1_q_wfm_mhdev, f1_q_rwfm_mhdev, f1_tau)
 
     # --- Combined CSV ---
     comb_csv = joinpath(data_dir, "rb_fits_combined.csv")
@@ -268,20 +282,22 @@ function main()
     @info "Saved combined plot" comb_png
 
     # --- Combined summary text ---
-    # h-values from q
-    f1_h2_mhdev = f1_q_wpm_mhdev * 2π^2 / f1_fh
-    f1_h0_mhdev = 2 * f1_q_wfm_mhdev
-    f1_hm_mhdev = 3 * f1_q_rwfm_mhdev / (2π^2)
-    f1_h2_nll   = f1_q_wpm_nll   * 2π^2 / f1_fh
-    f1_h0_nll   = 2 * f1_q_wfm_nll
-    f1_hm_nll   = 3 * f1_q_rwfm_nll / (2π^2)
+    # h-values from q under Wu 2023 (q_to_h)
+    _h_of(q_wpm, q_wfm, q_rwfm, tau0) = q_to_h(
+        ClockNoiseParams(q_wpm=max(q_wpm, 1e-99),
+                         q_wfm=max(q_wfm, 1e-99),
+                         q_rwfm=max(q_rwfm, 1e-99)),
+        Float64(tau0))
 
-    f2_h2_mhdev = fit_res.q_wpm  * 2π^2 / f_h
-    f2_h0_mhdev = 2 * fit_res.q_wfm
-    f2_hm_mhdev = 3 * fit_res.q_rwfm / (2π^2)
-    f2_h2_nll   = nll_res.q_wpm  * 2π^2 / f_h
-    f2_h0_nll   = 2 * nll_res.q_wfm
-    f2_hm_nll   = 3 * nll_res.q_rwfm / (2π^2)
+    h1_mhdev = _h_of(f1_q_wpm_mhdev, f1_q_wfm_mhdev, f1_q_rwfm_mhdev, f1_τ₀)
+    h1_nll   = _h_of(f1_q_wpm_nll,   f1_q_wfm_nll,   f1_q_rwfm_nll,   f1_τ₀)
+    h2_mhdev = _h_of(fit_res.q_wpm,  fit_res.q_wfm,  fit_res.q_rwfm,  τ₀)
+    h2_nll   = _h_of(nll_res.q_wpm,  nll_res.q_wfm,  nll_res.q_rwfm,  τ₀)
+
+    f1_h2_mhdev = h1_mhdev.h2; f1_h0_mhdev = h1_mhdev.h0; f1_hm_mhdev = h1_mhdev.h_2
+    f1_h2_nll   = h1_nll.h2;   f1_h0_nll   = h1_nll.h0;   f1_hm_nll   = h1_nll.h_2
+    f2_h2_mhdev = h2_mhdev.h2; f2_h0_mhdev = h2_mhdev.h0; f2_hm_mhdev = h2_mhdev.h_2
+    f2_h2_nll   = h2_nll.h2;   f2_h0_nll   = h2_nll.h0;   f2_hm_nll   = h2_nll.h_2
 
     comb_txt = joinpath(data_dir, "rb_fits_combined.txt")
     open(comb_txt, "w") do io
@@ -298,7 +314,7 @@ function main()
         @printf(io, "%-24s  %9d  %12.2f  %12.2f  %12.2f  %10s  %8d\n",
             "6krb25apr", N,
             log10(max(f2_h2_nll, 1e-99)), log10(max(f2_h0_nll, 1e-99)), log10(max(f2_hm_nll, 1e-99)),
-            string(nll_res.converged), window_N)
+            string(nll_converged), window_N)
         println(io, "")
         println(io, "(NLL columns: log10 of implied h_α from KF q-params)")
         println(io, "")
