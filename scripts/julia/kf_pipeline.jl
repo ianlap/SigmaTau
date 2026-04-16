@@ -3,26 +3,28 @@
 #
 # Non-interactive port of matlab/legacy/kflab/main_kf_pipeline_unified.m.
 # Stages:
-#   1. Load phase data + tau0 from reference/<dataset>.txt.
+#   1. Load phase data + tau0 from reference/<dataset>.txt (or reference/raw/).
 #   2. Compute MHDEV for noise characterisation.
 #   3. Obtain initial q values — prefers an interactive fit from
 #      mhdev_fit_interactive.py (results/<dataset>/kf/mhdev_fit.csv); falls
 #      back to SigmaTau.mhdev_fit on FIT_REGIONS declared below.
 #   4. Run the KF (no steering, diffuse P0) with fitted q — initial test.
-#   5. Refine q via innovation NLL (optimize_kf / Nelder-Mead).
+#   5. Refine q via innovation NLL (optimize_nll / Nelder-Mead).
 #   6. Run the KF again with optimised q — final test.
 #   7. Compare: q values, innovation RMS, NLL, multi-step prediction RMS,
 #      sample the NLL surface around the optimum.
 #
 # Run from repo root:
-#   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl <dataset>
+#   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl <dataset> [N_max]
 # e.g.
 #   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl 6krb25apr
+#   julia --threads=auto --project=julia scripts/julia/kf_pipeline.jl 6krb25apr 50000
 
 using Dates
 using DelimitedFiles
 using Printf
 using Statistics
+using LinearAlgebra
 
 const HERE        = @__DIR__
 const REPO        = abspath(joinpath(HERE, "..", ".."))
@@ -32,9 +34,18 @@ using Pkg
 Pkg.activate(joinpath(REPO, "julia"); io = devnull)
 using SigmaTau
 
-isempty(ARGS) && error("usage: kf_pipeline.jl <dataset>  (basename in reference/)")
+isempty(ARGS) && error("usage: kf_pipeline.jl <dataset> [N_max]  (basename in reference/ or reference/raw/)")
 const DATASET = ARGS[1]
-const DATA    = joinpath(REPO, "reference", "$(DATASET).txt")
+
+function _resolve_dataset(name::String)
+    for rel in ("$(name).txt", joinpath("raw", "$(name).txt"))
+        p = joinpath(REPO, "reference", rel)
+        isfile(p) && return p
+    end
+    error("dataset $(name).txt not found in reference/ or reference/raw/")
+end
+const DATA    = _resolve_dataset(DATASET)
+const N_MAX   = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : typemax(Int)
 const OUT_DIR = joinpath(HERE, "results", DATASET, "kf")
 
 # ── User configuration ───────────────────────────────────────────────────────
@@ -48,9 +59,15 @@ const FIT_REGIONS = [
 const HORIZONS_TO_REPORT = (1, 10, 60, 300, 3_600, 10_000, 100_000)
 const MATURITY_FRACTION  = 0.2
 
+# Cap on the longest prediction horizon evaluated by the rolling-origin RMS
+# loop. Even at HORIZON_CAP = 200k the loop is O((N-maturity)·HORIZON_CAP)
+# and runs in seconds at N~1e5. Increase if your dataset + intended horizons
+# warrant; decrease for fast dry runs.
+const HORIZON_CAP      = 200_000
+
 # NLL-surface grid for the diagnostic plot: span ±SURFACE_DECADES around the
 # optimum in (q_wfm, q_rwfm) at fixed q_wpm. SURFACE_NGRID × SURFACE_NGRID
-# evaluations of _kf_nll (~0.03s each at N=50k; scales ~linearly with N).
+# evaluations of innovation_nll (~ms-scale each at N=50k).
 const SURFACE_NGRID    = 9
 const SURFACE_DECADES  = 3.0
 
@@ -60,14 +77,16 @@ function say(msg)
     flush(stdout)
 end
 
-isfile(DATA) || error("missing $DATA; check the dataset name")
-
 say("dataset = $DATASET")
 say("reading $DATA ...")
-raw   = readdlm(DATA)
-N     = size(raw, 1)
-mjd   = Float64.(raw[1:N, 1])
-x     = Float64.(raw[1:N, 2])
+raw_all = readdlm(DATA)
+const N_FULL = size(raw_all, 1)
+const N      = min(N_FULL, N_MAX)
+if N < N_FULL
+    say(@sprintf("  truncating to N=%d of %d samples", N, N_FULL))
+end
+mjd   = Float64.(raw_all[1:N, 1])
+x     = Float64.(raw_all[1:N, 2])
 tau0  = median(diff(mjd)) * SEC_PER_DAY
 say(@sprintf("  loaded %d samples  tau0=%.6fs  record=%.3f days",
              N, tau0, (N - 1) * tau0 / SEC_PER_DAY))
@@ -133,26 +152,70 @@ q_rwfm0 = q_fit[:rwfm] > 0 ? q_fit[:rwfm] : q_wpm0 * 1e-8
 @printf("  initial q_wfm  = %.4e\n", q_wfm0)
 @printf("  initial q_rwfm = %.4e\n", q_rwfm0)
 
-# ── Stage 4: initial KF ──────────────────────────────────────────────────────
+# ── Stage 4: initial KF + rolling-origin prediction RMS ─────────────────────
 maturity = max(NSTATES * 10, round(Int, MATURITY_FRACTION * N))
-max_hor  = N - maturity - 1
+max_hor  = min(N - maturity - 1, HORIZON_CAP)
 
+"""
+    run_pipeline_kf(q_wpm, q_wfm, q_rwfm) -> NamedTuple
+
+Run the KF on `x` under a 3-state ClockModel with the given q's (no steering,
+diffuse P0), then compute rolling-origin phase-prediction RMS across horizons
+1..max_hor using the KF's posterior state trajectory. Returns
+`(kf_result, rms_error::Vector{Float64}, n_samples::Vector{Int})`.
+
+Rolling-origin CV: for each start s ∈ [maturity, N-2], propagate the state
+estimate x̂ₛ through Φ for h=1..min(max_hor, N-s-1) steps and compare the
+predicted phase (state[1]) to the observed phase x[s+h]. The phase component
+of `predict_holdover` would do the same math; we skip `predict_holdover` here
+to avoid rebuilding Φ once per start.
+"""
 function run_pipeline_kf(q_wpm, q_wfm, q_rwfm)
-    kf_cfg = KalmanConfig(
-        q_wpm   = q_wpm,
-        q_wfm   = q_wfm,
-        q_rwfm  = q_rwfm,
-        R       = q_wpm,
-        g_p     = 0.0, g_i = 0.0, g_d = 0.0,
-        P0      = 1e6,
-        nstates = NSTATES,
-        tau     = tau0,
-    )
-    pred_cfg = PredictConfig(maturity = maturity, max_horizon = max_hor)
-    return kf_predict(x, tau0, kf_cfg, pred_cfg)
+    model = ClockModel3(noise = ClockNoiseParams(q_wpm = q_wpm,
+                                                 q_wfm = q_wfm,
+                                                 q_rwfm = q_rwfm),
+                        tau = tau0)
+    kf = kalman_filter(x, model; g_p = 0.0, g_i = 0.0, g_d = 0.0, P0 = 1e6)
+
+    Φ = build_phi(model)
+    # Stack state estimates once.
+    # state[:, s] = [phase_est[s]; freq_est[s]; drift_est[s]]
+    sum_sq_err = zeros(Float64, max_hor)
+    n_samples_h = zeros(Int,    max_hor)
+
+    state_vec = Vector{Float64}(undef, 3)
+
+    for s in maturity:(N - 2)
+        h_limit = min(max_hor, N - s - 1)
+        h_limit < 1 && continue
+
+        state_vec[1] = kf.phase_est[s]
+        state_vec[2] = kf.freq_est[s]
+        state_vec[3] = kf.drift_est[s]
+
+        @inbounds for h in 1:h_limit
+            # state_vec ← Φ * state_vec (3×3 @ 3-vector)
+            p = Φ[1,1]*state_vec[1] + Φ[1,2]*state_vec[2] + Φ[1,3]*state_vec[3]
+            f = Φ[2,1]*state_vec[1] + Φ[2,2]*state_vec[2] + Φ[2,3]*state_vec[3]
+            d = Φ[3,1]*state_vec[1] + Φ[3,2]*state_vec[2] + Φ[3,3]*state_vec[3]
+            state_vec[1] = p
+            state_vec[2] = f
+            state_vec[3] = d
+            err = x[s + h] - p
+            sum_sq_err[h] += err * err
+            n_samples_h[h] += 1
+        end
+    end
+
+    rms_error = Vector{Float64}(undef, max_hor)
+    for h in 1:max_hor
+        rms_error[h] = n_samples_h[h] > 0 ? sqrt(sum_sq_err[h] / n_samples_h[h]) : NaN
+    end
+
+    return (kf_result = kf, rms_error = rms_error, n_samples = n_samples_h)
 end
 
-say("running initial KF (fitted q) ...")
+say(@sprintf("running initial KF (fitted q); rolling-origin RMS over %d horizons ...", max_hor))
 t_init  = @elapsed res0 = run_pipeline_kf(q_wpm0, q_wfm0, q_rwfm0)
 kf0     = res0.kf_result
 innov0  = kf0.innovations[maturity:end]   # exclude warm-up
@@ -163,18 +226,22 @@ say(@sprintf("  initial KF: %.2fs  innov RMS=%.4g  std=%.4g",
              t_init, stats0.rms, stats0.std))
 
 # ── Stage 5: NLL optimisation ────────────────────────────────────────────────
-say("optimising q via NLL ...")
-opt_cfg = OptimizeConfig(
-    q_wpm   = q_wpm0,
-    q_wfm   = q_wfm0,
-    q_rwfm  = q_rwfm0,
-    nstates = NSTATES,
-    tau     = tau0,
-    verbose = true,
-)
-t_opt = @elapsed opt = optimize_kf(x, opt_cfg)
-say(@sprintf("  optimiser: %.2fs  %d NLL evals  converged=%s",
-             t_opt, opt.n_evals, opt.converged))
+say("optimising q via NLL (optimize_nll, Nelder-Mead) ...")
+noise_init = ClockNoiseParams(q_wpm = q_wpm0, q_wfm = q_wfm0, q_rwfm = q_rwfm0)
+t_opt = @elapsed opt_params = optimize_nll(x, tau0;
+                                           noise_init = noise_init,
+                                           optimize_qwpm = true,
+                                           verbose = true)
+# optimize_nll drops n_evals/converged/nll from its return type (post-refactor;
+# see FIX_PARKING_LOT.md). Re-evaluate NLL at the optimum for the summary CSV;
+# converged is hard-wired true (a placeholder until the API exposes it).
+opt_model = ClockModel3(noise = opt_params, tau = tau0)
+opt_nll   = innovation_nll(Vector{Float64}(x), opt_model)
+opt       = (q_wpm = opt_params.q_wpm, q_wfm = opt_params.q_wfm,
+             q_rwfm = opt_params.q_rwfm, nll = opt_nll,
+             n_evals = -1, converged = true)  # n_evals/converged are placeholders
+say(@sprintf("  optimiser: %.2fs  NLL(opt)=%.6g  (converged=%s)",
+             t_opt, opt.nll, opt.converged))
 
 # ── Stage 6: optimised KF ────────────────────────────────────────────────────
 say("running optimised KF ...")
@@ -232,10 +299,6 @@ end
 # NLL surface on (q_wfm, q_rwfm) around the optimum (q_wpm fixed).
 say(@sprintf("sampling NLL surface on %d×%d grid around optimum ...",
              SURFACE_NGRID, SURFACE_NGRID))
-surf_cfg = OptimizeConfig(
-    q_wpm = opt.q_wpm, q_wfm = opt.q_wfm, q_rwfm = opt.q_rwfm,
-    nstates = NSTATES, tau = tau0, verbose = false,
-)
 q_wfm_grid  = 10.0 .^ range(log10(opt.q_wfm)  - SURFACE_DECADES,
                              log10(opt.q_wfm)  + SURFACE_DECADES,
                              length = SURFACE_NGRID)
@@ -246,7 +309,11 @@ t_surf = @elapsed begin
     open(joinpath(OUT_DIR, "kf_nll_surface.csv"), "w") do io
         println(io, "q_wfm,q_rwfm,nll")
         for qw in q_wfm_grid, qr in q_rwfm_grid
-            nll_val = SigmaTau._kf_nll([log10(qw), log10(qr)], x, surf_cfg)
+            surf_model = ClockModel3(noise = ClockNoiseParams(q_wpm = opt.q_wpm,
+                                                              q_wfm = qw,
+                                                              q_rwfm = qr),
+                                     tau = tau0)
+            nll_val = innovation_nll(Vector{Float64}(x), surf_model)
             @printf(io, "%.9g,%.9g,%.9g\n", qw, qr, nll_val)
         end
     end
