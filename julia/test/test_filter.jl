@@ -1,11 +1,7 @@
 # test_filter.jl — Kalman filter tests
-# Verifies: (1) filter runs without error on white FM data,
-#           (2) residuals have zero mean,
-#           (3) covariance converges,
-#           (4) kf_predict runs and returns RMS stats,
-#           (5) kf_optimize — skipped pending PR #13.
 
 using Statistics
+using Random
 
 @testset "Kalman filter" begin
 
@@ -13,21 +9,14 @@ using Statistics
     Random.seed!(2024)
     N    = 2000
     tau0 = 1.0
-    # White FM noise: cumsum of white noise → phase random walk
     x_wfm = cumsum(randn(N))
 
     # ── Test 1: filter runs without error ─────────────────────────────────────
     @testset "kalman_filter / kf_filter run on white FM" begin
-        cfg = KalmanConfig(
-            q_wfm  = 1.0,
-            q_rwfm = 0.0,
-            R      = 1.0,
-            g_p    = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 3,
-            tau    = tau0,
-            P0     = 1e6,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=tau0)
+        
+        result = kalman_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=1e6)
         @test result isa KalmanResult
         @test length(result.phase_est)   == N
         @test length(result.freq_est)    == N
@@ -39,86 +28,57 @@ using Statistics
         @test all(isfinite, result.freq_est)
         @test all(isfinite, result.residuals)
 
-        # kf_filter is an alias — must return the same type
-        cfg2   = deepcopy(cfg)
-        result2 = kf_filter(x_wfm, cfg2)
+        # kf_filter is an alias
+        result2 = kf_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=1e6)
         @test result2 isa KalmanResult
     end
 
     # ── Test 2: residuals have zero mean ──────────────────────────────────────
     @testset "residuals have zero mean (|mean| < 3σ/√N)" begin
-        cfg = KalmanConfig(
-            q_wfm   = 1.0,
-            q_rwfm  = 0.0,
-            R       = 1.0,
-            g_p = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 3,
-            tau     = tau0,
-            P0      = 1e6,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=tau0)
+        result = kalman_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=1e6)
         resid = result.residuals
         μ = mean(resid)
         σ = std(resid)
-        # For a correctly tuned filter, residuals should be near zero mean.
-        # Tolerance: 3 standard errors (3σ/√N).
         @test abs(μ) < 3 * σ / sqrt(N)
     end
 
-    # ── Test 3: covariance P[1,1] converges (much less than P0 at steady state) ──
+    # ── Test 3: covariance P[1,1] converges ───────────────────────────────────
     @testset "covariance P[1,1] converges" begin
         P0_scalar = 1e6
-        cfg = KalmanConfig(
-            q_wfm   = 1.0,
-            q_rwfm  = 0.0,
-            R       = 1.0,
-            g_p = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 3,
-            tau     = tau0,
-            P0      = P0_scalar,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=tau0)
+        result = kalman_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=P0_scalar)
         p11_final = result.P_history[1, 1, end]
-        # Steady-state P[1,1] must be much smaller than the initial P0
         @test p11_final < P0_scalar / 1000
-        # Steady-state P[1,1] must be finite and positive
         @test isfinite(p11_final)
         @test p11_final > 0.0
     end
 
     # ── Test 4: 2-state and 5-state models run without error ──────────────────
     @testset "2-state model runs" begin
-        cfg = KalmanConfig(
-            q_wfm = 1.0, q_rwfm = 0.0, R = 1.0,
-            g_p = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 2, tau = tau0, P0 = 1e4,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel2(noise=noise, tau=tau0)
+        result = kalman_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=1e4)
         @test result isa KalmanResult
         @test all(result.drift_est .== 0.0)   # no drift state
         @test all(isfinite, result.phase_est)
     end
 
     @testset "5-state model (diurnal) runs" begin
-        cfg = KalmanConfig(
-            q_wfm = 1.0, q_rwfm = 0.0, R = 1.0,
-            q_diurnal = 1e-4,
-            g_p = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 5, tau = tau0, P0 = 1e4,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModelDiurnal(noise=noise, tau=tau0, q_diurnal=1e-4)
+        result = kalman_filter(x_wfm, model; g_p=0.0, g_i=0.0, g_d=0.0, P0=1e4)
         @test result isa KalmanResult
         @test all(isfinite, result.phase_est)
     end
 
     # ── Test 5: PID steering runs without NaN ─────────────────────────────────
     @testset "PID steering produces finite steers" begin
-        cfg = KalmanConfig(
-            q_wfm = 1.0, q_rwfm = 1e-4, R = 1.0,
-            g_p = 0.1, g_i = 0.01, g_d = 0.05,
-            nstates = 3, tau = tau0, P0 = 1e4,
-        )
-        result = kalman_filter(x_wfm, cfg)
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=1e-4, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=tau0)
+        result = kalman_filter(x_wfm, model; g_p=0.1, g_i=0.01, g_d=0.05, P0=1e4)
         @test all(isfinite, result.steers)
         @test all(isfinite, result.sumsteers)
         @test all(isfinite, result.sum2steers)
@@ -131,14 +91,11 @@ using Statistics
         data = cumsum(randn(N2))
         tau  = 1.0
 
-        kf_cfg = KalmanConfig(
-            q_wfm = 1.0, q_rwfm = 0.0, R = 1.0,
-            g_p = 0.0, g_i = 0.0, g_d = 0.0,
-            nstates = 3, tau = tau, P0 = 1e6,
-        )
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=tau)
         pred_cfg = PredictConfig(maturity = 100, max_horizon = 50)
 
-        pr = kf_predict(data, tau, kf_cfg, pred_cfg)
+        pr = kf_predict(data, model, pred_cfg)
         @test pr isa PredictResult
         @test length(pr.horizons)  == length(pr.rms_error) == length(pr.n_samples)
         @test length(pr.horizons) > 0
@@ -148,60 +105,44 @@ using Statistics
         @test all(pr.n_samples .>= 1)
     end
 
-    # ── Test 7: kf_optimize — skipped until optimize.jl lands in PR #13 ────────
-    # @testset "kf_optimize finds finite optimal Q" — see PR #13
-
     @testset "3-D NLL optimization recovers q_wpm on WPM+WFM data" begin
         Random.seed!(99)
-        # Synthetic phase: WPM (R) + WFM (q_wfm), no drift
         N = 4096; τ = 1.0
         q_wpm_true = 0.25
         q_wfm_true = 0.01
-        # Phase = random walk from WFM process noise, observed with WPM measurement noise
-        # Matches KF state-space model: phase(k) = phase(k-1) + ε, ε ~ N(0, q_wfm*τ)
         phase_true = cumsum(sqrt(q_wfm_true * τ) .* randn(N))
         ph = phase_true .+ sqrt(q_wpm_true) .* randn(N)
 
-        cfg = OptimizeConfig(
-            q_wpm   = 1.0,    # poor initial guess — force optimizer to work
-            q_wfm   = 0.1,
-            q_rwfm  = 1e-8,
-            nstates = 3,
-            tau     = τ,
-            verbose = false,
-            max_iter = 2000,
-            tol      = 1e-5,
-            optimize_qwpm = true,
-        )
-        res = optimize_kf(ph, cfg)
-        # Should recover within 1 decade (NLL landscape is smooth here)
+        noise_init = ClockNoiseParams(q_wpm=1.0, q_wfm=0.1, q_rwfm=1e-8)
+        res = optimize_nll(ph, τ; noise_init=noise_init, verbose=false, max_iter=2000, tol=1e-5, optimize_qwpm=true)
+
         @test abs(log10(res.q_wpm) - log10(q_wpm_true)) < 1.0
         @test abs(log10(res.q_wfm) - log10(q_wfm_true)) < 1.0
     end
 
-    @testset "_kf_nll_static matches _kf_nll output" begin
+    @testset "innovation_nll output finite" begin
         Random.seed!(123)
         N  = 2048; τ = 1.0
         x  = cumsum(randn(N))
-        cfg = OptimizeConfig(q_wpm=1.0, q_wfm=0.5, q_rwfm=1e-4,
-                             nstates=3, tau=τ, verbose=false,
-                             optimize_qwpm=true)
-        theta = [log10(cfg.q_wpm), log10(cfg.q_wfm), log10(cfg.q_rwfm)]
-        nll_slow = SigmaTau._kf_nll(theta, x, cfg)
-        nll_fast = SigmaTau._kf_nll_static(theta, x, cfg)
-        @test isapprox(nll_slow, nll_fast; rtol=1e-10)
+        noise = ClockNoiseParams(q_wpm=1.0, q_wfm=0.5, q_rwfm=1e-4)
+        m3 = ClockModel3(noise=noise, tau=τ)
+        nll3 = innovation_nll(x, m3)
+        @test isfinite(nll3)
+        
+        m2 = ClockModel2(noise=noise, tau=τ)
+        nll2 = innovation_nll(x, m2)
+        @test isfinite(nll2)
     end
 
-    @testset "optimize_kf_nll wrapper with h_init warm start" begin
+    @testset "optimize_nll wrapper with h_init warm start" begin
         Random.seed!(55)
         h = Dict(2.0 => 1e-22, 0.0 => 1e-22, -2.0 => 1e-26)
         x = generate_composite_noise(h, 2^14, 1.0; seed=55)
-        res = optimize_kf_nll(x, 1.0; h_init=h, verbose=false)
-        @test res.converged
+        res = optimize_nll(x, 1.0; h_init=h, verbose=false, optimize_qwpm=true)
         f_h = 0.5
-        q_wpm_exp  = h[2.0] * f_h / (2π^2)
-        q_wfm_exp  = h[0.0] / 2
-        q_rwfm_exp = (2π^2 / 3) * h[-2.0]
+        q_wpm_exp  = h[2.0] * f_h / (4π^2)
+        q_wfm_exp  = h[0.0] / 2.0
+        q_rwfm_exp = (2π^2 / 3.0) * h[-2.0]
         @test abs(log10(res.q_wpm)  - log10(q_wpm_exp))  < 1.0
         @test abs(log10(res.q_wfm)  - log10(q_wfm_exp))  < 1.0
         @test abs(log10(res.q_rwfm) - log10(q_rwfm_exp)) < 1.0

@@ -219,5 +219,7 @@ using SigmaTau
     include("test_noise_fit.jl")
     include("test_noise_gen.jl")
     include("test_ml_features.jl")
+    include("test_als_fit.jl")
+    include("test_matlab_parity.jl")
 
 end  # @testset "SigmaTau"

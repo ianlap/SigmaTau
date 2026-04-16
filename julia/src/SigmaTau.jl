@@ -30,10 +30,12 @@ export validate_phase_data, validate_tau0
 export unpack_result
 export adev, mdev, tdev, hdev, mhdev, ldev
 export totdev, mtotdev, htotdev, mhtotdev
-export KalmanConfig, KalmanResult, kalman_filter
+export KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export PredictConfig, PredictResult, kf_predict
-export OptimizeConfig, OptimizeResult, optimize_kf, optimize_kf_nll
+export optimize_nll, innovation_nll, als_fit
+export ClockNoiseParams, ClockModel2, ClockModel3, ClockModelDiurnal
+export build_phi, build_Q, build_H, sigma_y_theory, h_to_q, q_to_h, steady_state_covariance, steady_state_gain, nstates
 export generate_power_law_noise
 export generate_composite_noise
 export CANONICAL_TAU_GRID, CANONICAL_M_LIST, FEATURE_NAMES, compute_feature_vector
@@ -49,9 +51,11 @@ include("engine.jl")     # shared engine
 include("deviations.jl") # thin wrappers: adev, …
 include("ml_features.jl") # canonical τ grid and 196-feature extraction
 include("noise_fit.jl")  # mhdev_fit (port of legacy kflab/mhdev_fit.m)
-include("filter.jl")     # KalmanConfig, KalmanResult, kalman_filter
-include("predict.jl")    # PredictConfig, PredictResult, kf_predict
-include("optimize.jl")   # OptimizeConfig, OptimizeResult, optimize_kf
+include("clock_model.jl")
+include("filter.jl")
+include("predict.jl")
+include("optimize.jl")
+include("als_fit.jl")
 
 # kf_filter is an alias for kalman_filter (matches problem-statement export name)
 const kf_filter = kalman_filter
