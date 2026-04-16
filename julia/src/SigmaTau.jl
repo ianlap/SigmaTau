@@ -36,6 +36,7 @@ export PredictConfig, PredictResult, kf_predict
 export optimize_nll, innovation_nll, als_fit
 export ClockNoiseParams, ClockModel2, ClockModel3, ClockModelDiurnal
 export build_phi, build_Q, build_H, sigma_y_theory, h_to_q, q_to_h, steady_state_covariance, steady_state_gain, nstates
+export OptimizeConfig, OptimizeResult, optimize_kf, optimize_kf_nll
 export generate_power_law_noise
 export generate_composite_noise
 export CANONICAL_TAU_GRID, CANONICAL_M_LIST, FEATURE_NAMES, compute_feature_vector
