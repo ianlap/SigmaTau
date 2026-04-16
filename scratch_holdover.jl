@@ -15,88 +15,58 @@ phase_shifted = (phase_ns .- phase_ns[1]) .* 1e-9
 
 tau0 = round((time_days[2] - time_days[1]) * 86400.0)
 
-# 2. Partition data: Use first 10,000 points for training to keep optimization fast.
-# Wait, user wants a long prediction. Let's use 20000 points for training.
+# 2. Partition data: 20000 points for training, next 10000 for test.
 N_train = 20000
 train_phase = phase_shifted[1:N_train]
 
-# test on the next 10000 points
 predict_horizon = min(10000, length(phase_shifted) - N_train)
 test_phase = phase_shifted[N_train+1:N_train+predict_horizon]
 
-println("Loaded \$(length(phase_shifted)) points. Train: \$(N_train), Test/Horizon: \$(predict_horizon)")
+println("Loaded $(length(phase_shifted)) points. Train: $(N_train), Test/Horizon: $(predict_horizon)")
 
-# 3. Fit MHDEV
-println("Fitting MHDEV...")
-taus, mhdevs, _ = mhtotdev(train_phase, tau0)
-noise_mhdev = fit_noise(taus, mhdevs, [:q_wpm, :q_wfm, :q_rwfm])
-println("MHDEV Noise: ", noise_mhdev)
-
-# 4. Fit NLL
+# 3. Fit NLL (from defaults — no mhdev warm-start needed)
 println("Fitting NLL...")
-noise_nll = optimize_nll(train_phase, tau0; 
-                         noise_init=noise_mhdev, 
+noise_nll = optimize_nll(train_phase, tau0;
                          optimize_qwpm=true, optimize_irwfm=false, verbose=true)
 println("NLL Noise: ", noise_nll)
 
-# 5. Fit ALS
+# 4. Fit ALS (warm-started from NLL)
 println("Fitting ALS...")
-noise_als = als_fit(train_phase, tau0; 
-                    noise_init=noise_nll, 
+noise_als = als_fit(train_phase, tau0;
+                    noise_init=noise_nll,
                     lags=50, max_iter=10, burn_in=100, optimize_qwpm=true, optimize_irwfm=false, verbose=true)
 println("ALS Noise: ", noise_als)
 
-# 6. Predict Holdover for each
-function get_prediction(noise_params)
+# 5. Predict holdover using the new API
+function run_holdover(noise_params)
     m = ClockModel3(noise=noise_params, tau=tau0)
-    # filter through train
-    fil = kalman_filter(train_phase, m)
-    # predict forward
-    x_hat = fil.x_hat[end]
-    P_hat = fil.P_hat[end]
-    
-    pred_phase = zeros(predict_horizon)
-    Phi = build_phi(m)
-    x_curr = x_hat
-    P_curr = P_hat
-    Q = build_Q(m)
-    
-    std_phase = zeros(predict_horizon)
-    for i in 1:predict_horizon
-        x_curr = Phi * x_curr
-        # Use discrete Lyap predict
-        P_curr = Phi * P_curr * Phi' + Q
-        pred_phase[i] = x_curr[1]
-        std_phase[i] = sqrt(P_curr[1,1])
-    end
-    return pred_phase, std_phase
+    kf = kalman_filter(train_phase, m; g_p=0.0, g_i=0.0, g_d=0.0)
+    return predict_holdover(kf, predict_horizon)
 end
 
 println("Generating predictions...")
-pred_mhdev, std_mhdev = get_prediction(noise_mhdev)
-pred_nll, std_nll = get_prediction(noise_nll)
-pred_als, std_als = get_prediction(noise_als)
+hr_nll = run_holdover(noise_nll)
+hr_als = run_holdover(noise_als)
 
-# Convert all phase plots back to nanoseconds for easier readability.
+# Convert to nanoseconds for plotting
 test_phase_ns = test_phase .* 1e9
-pred_mhdev_ns = pred_mhdev .* 1e9
-pred_nll_ns = pred_nll .* 1e9
-pred_als_ns = pred_als .* 1e9
-std_als_ns = std_als .* 1e9
+pred_nll_ns   = hr_nll.phase_pred .* 1e9
+pred_als_ns   = hr_als.phase_pred .* 1e9
+std_als_ns    = sqrt.(hr_als.P_pred[1, 1, :]) .* 1e9
 
-# Shift all to start at 0 so we see the prediction deviation clearly
+# Shift all to start at 0
 bias_true = test_phase_ns[1]
 test_phase_ns .-= bias_true
-pred_mhdev_ns .-= bias_true
-pred_nll_ns .-= bias_true
-pred_als_ns .-= bias_true
+pred_nll_ns   .-= bias_true
+pred_als_ns   .-= bias_true
 
-# 7. Plotting
+# 6. Plot
 test_t = (1:predict_horizon) .* tau0
 
-p = plot(test_t, test_phase_ns, label="True Data", linewidth=1.0, color=:black, title="Holdover Prediction (6k27feb Unsteered)", xlabel="Time (s)", ylabel="Phase (ns)")
+p = plot(test_t, test_phase_ns, label="True Data", linewidth=1.0, color=:black,
+         title="Holdover Prediction (6k27feb Unsteered)",
+         xlabel="Time (s)", ylabel="Phase (ns)")
 
-plot!(p, test_t, pred_mhdev_ns, label="MHDEV Pred", linewidth=2, linestyle=:dash)
 plot!(p, test_t, pred_nll_ns, label="NLL Pred", linewidth=2, linestyle=:dash)
 plot!(p, test_t, pred_als_ns, label="ALS Pred", linewidth=2, linestyle=:dash)
 

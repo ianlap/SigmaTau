@@ -68,6 +68,10 @@ Real GMR6000 Rb phase (35-day file, 1 PPS, ns)
 ### Files
 
 - `julia/src/{noise_gen,ml_features,optimize}.jl` — generator, features, NLL optimizer
+- `julia/src/clock_model.jl` — ClockNoiseParams, ClockModel{2,3,Diurnal}, build_phi/Q/H, DARE solvers
+- `julia/src/filter.jl` — KalmanResult, kalman_filter (uses ClockModel directly, no KalmanConfig)
+- `julia/src/predict.jl` — HoldoverResult, predict_holdover (replaced kf_predict/PredictConfig)
+- `julia/src/als_fit.jl` — ALS tuning estimator (Åkesson 2008 / Liu 2024)
 - `julia/src/deviations/{allan,hadamard,total}.jl` — patched for Int64 overflow
 - `julia/src/noise_fit.jl` — pre-existing `mhdev_fit` legacy estimator
 - `ml/dataset/generate_dataset.jl` — production driver module
@@ -412,12 +416,20 @@ Next:
 
 - Branch: `dev` (we should merge → `main` once PH 551 is in)
 - Recent commits relevant:
+  - `1789413` refactor(kf): extract ClockModel, modernize filter/optimize/ALS APIs
   - `c2c1a7f` fix(ml/loader): handle Julia col-major → h5py row-major
   - `ba3f337` docs(ml): full pipeline README
   - `b32af71` feat(ml): real-data loader + notebook validation section
   - `f41bbc1` feat(ml): adaptive notebook + 100-sample test dataset script
   - `e2f32fc` feat(ml/dataset): production 10k run script
   - `ead11ea` fix(deviations): prevent Int64 overflow in variance denominators
-- Remaining uncommitted: nothing (everything pushed)
-- Background process: nbconvert (notebook execution), task `b4abf7bxp`,
-  monitor `b8g4tx84x` watching for completion
+- KF API changes (2026-04-16):
+  - Removed: `KalmanConfig`, `OptimizeConfig`, `OptimizeResult`, `optimize_kf`,
+    `PredictConfig`, `PredictResult`, `kf_predict`
+  - Added: `ClockNoiseParams`, `ClockModel{2,3,Diurnal}`, `optimize_nll`,
+    `als_fit`, `HoldoverResult`, `predict_holdover`
+  - `kalman_filter` now takes a `ClockModel` directly instead of `KalmanConfig`
+  - `predict_holdover(kf, horizon)` replaces `kf_predict` — does forward
+    propagation from last filter state, returns full state + covariance trajectory
+  - `scripts/julia/kf_pipeline.jl` uses the OLD API and needs updating
+- 289/289 Julia tests pass

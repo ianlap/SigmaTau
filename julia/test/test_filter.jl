@@ -2,6 +2,7 @@
 
 using Statistics
 using Random
+using LinearAlgebra
 
 @testset "Kalman filter" begin
 
@@ -84,25 +85,65 @@ using Random
         @test all(isfinite, result.sum2steers)
     end
 
-    # ── Test 6: kf_predict runs and returns valid RMS stats ───────────────────
-    @testset "kf_predict returns valid RMS stats" begin
+    # ── Test 6: predict_holdover — zero state stays at zero ─────────────────
+    @testset "predict_holdover: zero state propagates to zero" begin
+        noise = ClockNoiseParams(q_wfm=0.0, q_rwfm=0.0, q_wpm=0.0)
+        model = ClockModel3(noise=noise, tau=1.0)
+        x0 = zeros(3)
+        P0 = zeros(3, 3)
+        hr = predict_holdover(x0, P0, model, 100)
+        @test hr isa HoldoverResult
+        @test all(hr.phase_pred .== 0.0)
+        @test all(hr.freq_pred .== 0.0)
+        @test all(hr.drift_pred .== 0.0)
+        @test all(hr.P_pred .== 0.0)
+    end
+
+    # ── Test 7: predict_holdover — covariance grows monotonically ─────────
+    @testset "predict_holdover: covariance grows monotonically" begin
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=1e-4, q_wpm=1.0)
+        model = ClockModel3(noise=noise, tau=1.0)
+        x0 = zeros(3)
+        P0 = Matrix{Float64}(I, 3, 3)
+        hr = predict_holdover(x0, P0, model, 50)
+        for i in 2:50
+            @test hr.P_pred[1, 1, i] >= hr.P_pred[1, 1, i-1]
+        end
+    end
+
+    # ── Test 8: predict_holdover — KalmanResult wrapper matches raw ───────
+    @testset "predict_holdover: KalmanResult wrapper matches raw method" begin
+        Random.seed!(77)
         N2 = 500
-        Random.seed!(42)
         data = cumsum(randn(N2))
-        tau  = 1.0
-
         noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
-        model = ClockModel3(noise=noise, tau=tau)
-        pred_cfg = PredictConfig(maturity = 100, max_horizon = 50)
+        model = ClockModel3(noise=noise, tau=1.0)
+        kf = kalman_filter(data, model; g_p=0.0, g_i=0.0, g_d=0.0)
 
-        pr = kf_predict(data, model, pred_cfg)
-        @test pr isa PredictResult
-        @test length(pr.horizons)  == length(pr.rms_error) == length(pr.n_samples)
-        @test length(pr.horizons) > 0
-        @test all(pr.horizons .>= 1)
-        @test all(isfinite, pr.rms_error)
-        @test all(pr.rms_error .>= 0.0)
-        @test all(pr.n_samples .>= 1)
+        hr1 = predict_holdover(kf, 20)
+
+        x0 = Float64[kf.phase_est[end], kf.freq_est[end], kf.drift_est[end]]
+        P0 = Matrix{Float64}(kf.P_history[:, :, end])
+        hr2 = predict_holdover(x0, P0, model, 20)
+
+        @test hr1.phase_pred ≈ hr2.phase_pred atol=1e-14
+        @test hr1.freq_pred  ≈ hr2.freq_pred  atol=1e-14
+        @test hr1.drift_pred ≈ hr2.drift_pred atol=1e-14
+        @test hr1.P_pred     ≈ hr2.P_pred     atol=1e-14
+    end
+
+    # ── Test 9: predict_holdover — 2-state model works ────────────────────
+    @testset "predict_holdover: 2-state model" begin
+        noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=0.0, q_wpm=1.0)
+        model = ClockModel2(noise=noise, tau=1.0)
+        x0 = Float64[0.0, 1.0]  # constant frequency => linear phase
+        P0 = zeros(2, 2)
+        hr = predict_holdover(x0, P0, model, 10)
+        for i in 1:10
+            @test hr.phase_pred[i] ≈ Float64(i) atol=1e-14
+            @test hr.freq_pred[i]  ≈ 1.0        atol=1e-14
+        end
+        @test all(hr.drift_pred .== 0.0)
     end
 
     @testset "3-D NLL optimization recovers q_wpm on WPM+WFM data" begin
