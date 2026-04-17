@@ -100,13 +100,13 @@ function main()
     @info "noise_init for NLL warm start" q_wpm=q_wpm_init q_wfm=q_wfm_init q_rwfm=q_rwfm_init
 
     window_N = min(2^19, length(ph))
-    nll_res = optimize_nll(view(ph, 1:window_N), τ₀;
+    opt_res = optimize_nll(view(ph, 1:window_N), τ₀;
                            noise_init = noise_init,
                            optimize_qwpm = false,
                            verbose = false,
                            max_iter = 1000)
-    # optimize_nll drops .converged; hard-wire true as a placeholder (see FIX_PARKING_LOT.md).
-    nll_converged = true
+    nll_res       = opt_res.noise
+    nll_converged = opt_res.converged
     @info "optimize_nll result" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_converged
 
     # --- Theoretical ADEV from each fit ---

@@ -33,7 +33,7 @@ export totdev, mtotdev, htotdev, mhtotdev
 export KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export HoldoverResult, predict_holdover
-export optimize_nll, innovation_nll, als_fit
+export optimize_nll, innovation_nll, als_fit, OptimizeNLLResult
 export ClockNoiseParams, ClockModel2, ClockModel3, ClockModelDiurnal
 export build_phi, build_Q, build_H, sigma_y_theory, h_to_q, q_to_h, steady_state_covariance, steady_state_gain, nstates
 export generate_power_law_noise

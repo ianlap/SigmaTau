@@ -85,14 +85,12 @@ function run_one_sample(idx::Integer;
     # NLL labels — use h-warm start for fast convergence.
     # optimize_qwpm=false preserves the pre-refactor optimize_kf_nll semantic
     # that R is fixed to its analytical value when h_init is provided.
-    opt_params = optimize_nll(x, τ₀;
+    opt_res    = optimize_nll(x, τ₀;
                               h_init = p.h_coeffs,
                               optimize_qwpm = false,
                               verbose = verbose)
-    # Post-refactor optimize_nll drops .nll/.converged. Re-evaluate NLL at the
-    # optimum; .converged hard-wired true (placeholder — see FIX_PARKING_LOT.md).
-    opt_model = ClockModel3(noise = opt_params, tau = Float64(τ₀))
-    opt_nll   = innovation_nll(Vector{Float64}(x), opt_model)
+    opt_params = opt_res.noise
+    opt_nll    = opt_res.nll
 
     # Provenance h-vector in canonical α order (+2, +1, 0, -1, -2)
     h_vec = fill(NaN, 5)

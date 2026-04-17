@@ -157,8 +157,9 @@ using LinearAlgebra
         noise_init = ClockNoiseParams(q_wpm=1.0, q_wfm=0.1, q_rwfm=1e-8)
         res = optimize_nll(ph, τ; noise_init=noise_init, verbose=false, max_iter=2000, tol=1e-5, optimize_qwpm=true)
 
-        @test abs(log10(res.q_wpm) - log10(q_wpm_true)) < 1.0
-        @test abs(log10(res.q_wfm) - log10(q_wfm_true)) < 1.0
+        @test res isa OptimizeNLLResult
+        @test abs(log10(res.noise.q_wpm) - log10(q_wpm_true)) < 1.0
+        @test abs(log10(res.noise.q_wfm) - log10(q_wfm_true)) < 1.0
     end
 
     @testset "innovation_nll output finite" begin
@@ -184,9 +185,10 @@ using LinearAlgebra
         q_wpm_exp  = h[2.0] * f_h / (4π^2)
         q_wfm_exp  = h[0.0] / 2.0
         q_rwfm_exp = (2π^2 / 3.0) * h[-2.0]
-        @test abs(log10(res.q_wpm)  - log10(q_wpm_exp))  < 1.0
-        @test abs(log10(res.q_wfm)  - log10(q_wfm_exp))  < 1.0
-        @test abs(log10(res.q_rwfm) - log10(q_rwfm_exp)) < 1.0
+        @test res isa OptimizeNLLResult
+        @test abs(log10(res.noise.q_wpm)  - log10(q_wpm_exp))  < 1.0
+        @test abs(log10(res.noise.q_wfm)  - log10(q_wfm_exp))  < 1.0
+        @test abs(log10(res.noise.q_rwfm) - log10(q_rwfm_exp)) < 1.0
     end
 
 end  # @testset "Kalman filter"

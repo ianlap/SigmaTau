@@ -117,13 +117,13 @@ function main()
     # Use full file since N < 2^19
     window_N = min(2^19, N)
     @info "NLL window" window_N=window_N full_N=N
-    nll_res = optimize_nll(view(ph, 1:window_N), τ₀;
+    opt_res = optimize_nll(view(ph, 1:window_N), τ₀;
                            noise_init = noise_init,
                            optimize_qwpm = false,
                            verbose = false,
                            max_iter = 1000)
-    # optimize_nll drops .converged; hard-wire true as placeholder (FIX_PARKING_LOT.md).
-    nll_converged = true
+    nll_res       = opt_res.noise
+    nll_converged = opt_res.converged
     @info "NLL result (file2)" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_converged
 
     # --- Theoretical ADEVs ---

@@ -26,9 +26,10 @@ println("Loaded $(length(phase_shifted)) points. Train: $(N_train), Test/Horizon
 
 # 3. Fit NLL (from defaults — no mhdev warm-start needed)
 println("Fitting NLL...")
-noise_nll = optimize_nll(train_phase, tau0;
+res_nll   = optimize_nll(train_phase, tau0;
                          optimize_qwpm=true, optimize_irwfm=false, verbose=true)
-println("NLL Noise: ", noise_nll)
+noise_nll = res_nll.noise
+println("NLL Noise: ", noise_nll, "  (converged=", res_nll.converged, ")")
 
 # 4. Fit ALS (warm-started from NLL)
 println("Fitting ALS...")

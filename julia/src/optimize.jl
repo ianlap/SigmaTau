@@ -177,9 +177,34 @@ function innovation_nll(data::Vector{Float64}, m::Union{ClockModel2, ClockModelD
 end
 
 """
-    optimize_nll(data, tau0; h_init, noise_init, ...) -> ClockNoiseParams
+    OptimizeNLLResult
 
-Optimize parameters over NelderMead. Returns optimal `ClockNoiseParams`.
+Return value of [`optimize_nll`](@ref). Wraps the fitted noise parameters
+together with optimizer diagnostics so callers do not have to re-run the
+likelihood or guess at convergence status.
+
+# Fields
+- `noise::ClockNoiseParams`: fitted q's at the NLL optimum.
+- `nll::Float64`: value of the innovation NLL at the optimum.
+- `n_evals::Int`: number of `innovation_nll` evaluations consumed by Nelder-Mead.
+- `converged::Bool`: `true` iff the simplex `std(fvals) < tol` criterion fired
+  before `max_iter` exhausted (i.e., the optimizer stopped on convergence,
+  not on the iteration cap).
+"""
+struct OptimizeNLLResult
+    noise::ClockNoiseParams
+    nll::Float64
+    n_evals::Int
+    converged::Bool
+end
+
+"""
+    optimize_nll(data, tau0; h_init, noise_init, ...) -> OptimizeNLLResult
+
+Fit Zucca-Tavella clock-SDE diffusion parameters by Nelder-Mead on the
+Gaussian innovation NLL. Returns an [`OptimizeNLLResult`](@ref) carrying the
+fitted `ClockNoiseParams` plus the optimizer's NLL, evaluation count, and
+convergence flag.
 """
 function optimize_nll(data::AbstractVector{<:Real}, tau0::Real;
                       h_init::Union{Nothing,AbstractDict{<:Real,<:Real}}=nothing,
@@ -240,5 +265,6 @@ function optimize_nll(data::AbstractVector{<:Real}, tau0::Real;
         optimize_irwfm && println("  q_irwfm = $(round(q_irwfm_opt, sigdigits=3))")
     end
 
-    return ClockNoiseParams(q_wpm_opt, q_wfm_opt, q_rwfm_opt, q_irwfm_opt)
+    noise_opt = ClockNoiseParams(q_wpm_opt, q_wfm_opt, q_rwfm_opt, q_irwfm_opt)
+    return OptimizeNLLResult(noise_opt, nll_opt, n_evals, converged)
 end

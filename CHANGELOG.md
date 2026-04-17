@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `OptimizeNLLResult` return struct from `optimize_nll` exposing `noise`, `nll`, `n_evals`, and `converged` fields (previously only the `ClockNoiseParams` was returned; callers had to re-run `innovation_nll` for the NLL and had no access to convergence state).
 - Regression test for non-contiguous index vectors in `mhdev_fit`.
 - CLI test for empty-result display paths.
 

@@ -228,20 +228,16 @@ say(@sprintf("  initial KF: %.2fs  innov RMS=%.4g  std=%.4g",
 # ── Stage 5: NLL optimisation ────────────────────────────────────────────────
 say("optimising q via NLL (optimize_nll, Nelder-Mead) ...")
 noise_init = ClockNoiseParams(q_wpm = q_wpm0, q_wfm = q_wfm0, q_rwfm = q_rwfm0)
-t_opt = @elapsed opt_params = optimize_nll(x, tau0;
-                                           noise_init = noise_init,
-                                           optimize_qwpm = true,
-                                           verbose = true)
-# optimize_nll drops n_evals/converged/nll from its return type (post-refactor;
-# see FIX_PARKING_LOT.md). Re-evaluate NLL at the optimum for the summary CSV;
-# converged is hard-wired true (a placeholder until the API exposes it).
-opt_model = ClockModel3(noise = opt_params, tau = tau0)
-opt_nll   = innovation_nll(Vector{Float64}(x), opt_model)
-opt       = (q_wpm = opt_params.q_wpm, q_wfm = opt_params.q_wfm,
-             q_rwfm = opt_params.q_rwfm, nll = opt_nll,
-             n_evals = -1, converged = true)  # n_evals/converged are placeholders
-say(@sprintf("  optimiser: %.2fs  NLL(opt)=%.6g  (converged=%s)",
-             t_opt, opt.nll, opt.converged))
+t_opt = @elapsed opt_res = optimize_nll(x, tau0;
+                                        noise_init = noise_init,
+                                        optimize_qwpm = true,
+                                        verbose = true)
+opt_params = opt_res.noise
+opt        = (q_wpm = opt_params.q_wpm, q_wfm = opt_params.q_wfm,
+              q_rwfm = opt_params.q_rwfm, nll = opt_res.nll,
+              n_evals = opt_res.n_evals, converged = opt_res.converged)
+say(@sprintf("  optimiser: %.2fs  NLL(opt)=%.6g  (%d evals, converged=%s)",
+             t_opt, opt.nll, opt.n_evals, opt.converged))
 
 # ── Stage 6: optimised KF ────────────────────────────────────────────────────
 say("running optimised KF ...")
