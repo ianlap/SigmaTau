@@ -119,12 +119,19 @@ function alpha_int = identify_b1rn(x, m, data_type)
 if strcmpi(data_type, 'phase')
     x_dec = x(1:m:end);
     x_dec = sigmatau.util.detrend(x_dec, 2);
-    % AVAR at tau = m*tau0. Computed from decimated phase so the detrend
-    % above carries through; the m^2 factor corrects simple_avar(..., 1)
-    % to SP1065 Eq. 14's m^2*tau0^2 denominator.
-    res = sigmatau.dev.adev(x_dec, 1.0, 1);
-    avar_val = res.deviation^2 / double(m)^2;
-    N_avar     = numel(x_dec) - 2;
+    % AVAR at tau = m*tau0 via inline ADEV kernel (overlapping second
+    % differences at m=1 on the decimated phase). Calling sigmatau.dev.adev
+    % here would re-enter sigmatau.dev.engine → noise_id → identify_b1rn →
+    % infinite recursion whenever numel(x_dec) < NEFF_RELIABLE. Mirrors the
+    % MDEV inlining in the mu_best==-2 block below.
+    Nx = numel(x_dec);
+    if Nx >= 3
+        d2_avar  = x_dec(3:Nx) - 2*x_dec(2:Nx-1) + x_dec(1:Nx-2);
+        avar_val = sum(d2_avar.^2) / ((Nx - 2) * 2 * double(m)^2);
+    else
+        avar_val = NaN;
+    end
+    N_avar = Nx - 2;
 
     dx  = diff(x);
     Nd  = floor(numel(dx) / m) * m;
