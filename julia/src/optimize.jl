@@ -199,17 +199,23 @@ struct OptimizeNLLResult
 end
 
 """
-    optimize_nll(data, tau0; h_init, noise_init, ...) -> OptimizeNLLResult
+    optimize_nll(data, tau0; h_init, noise_init, optimize_qwpm=false, ...) -> OptimizeNLLResult
 
 Fit Zucca-Tavella clock-SDE diffusion parameters by Nelder-Mead on the
 Gaussian innovation NLL. Returns an [`OptimizeNLLResult`](@ref) carrying the
 fitted `ClockNoiseParams` plus the optimizer's NLL, evaluation count, and
 convergence flag.
+
+By default `optimize_qwpm=false`: `q_wpm` (= measurement noise `R`) is held at
+its seed value, matching MATLAB `sigmatau.kf.optimize` and the textbook tuning
+problem where `R` is known from the short-τ WPM floor or the measurement-chain
+calibration. Pass `optimize_qwpm=true` to sweep `R` jointly with the diffusion
+parameters.
 """
 function optimize_nll(data::AbstractVector{<:Real}, tau0::Real;
                       h_init::Union{Nothing,AbstractDict{<:Real,<:Real}}=nothing,
                       noise_init::Union{ClockNoiseParams, Nothing}=nothing,
-                      optimize_qwpm::Bool = true,
+                      optimize_qwpm::Bool = false,
                       optimize_irwfm::Bool = false,
                       verbose::Bool = true,
                       max_iter::Int = 500,
