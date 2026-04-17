@@ -40,8 +40,6 @@ examples/6krb25apr/stable32_out/*.txt
 # AI Tooling & Context
 .claude/
 .gemini/
-CLAUDE.md
-GEMINI.md
 devplans/
 gha-creds-*.json
 .github/commands/gemini-*.toml
