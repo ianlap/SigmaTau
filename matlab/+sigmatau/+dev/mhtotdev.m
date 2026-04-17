@@ -24,7 +24,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @mhtotdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = mhtotdev_kernel(x, m, tau0)
+function [v, neff] = mhtotdev_kernel(x, m, tau0, x_cs)
 % Linear detrend per phase segment, symmetric reflection, third diffs + moving avg.
 assert(m >= 1, 'SigmaTau:mhtotdev', 'averaging factor m must be >= 1');
 N     = numel(x);
@@ -37,7 +37,6 @@ end
 Lp        = 3*m + 1;   % phase segment length
 total_sum = 0.0;
 
-CX  = cumsum([0; x(:)]);
 CXT = cumsum([0; x(:) .* (1:N)']);
 
 % Precompute indexing ranges
@@ -49,24 +48,24 @@ j_range = (1:5*m+4)';
 for n = 1:nsubs
     % Linear detrend without slicing: using centered coordinates for stability
     % t_center = (1:Lp) - (Lp+1)/2
-    sx  = CX(n+Lp) - CX(n);
+    sx  = x_cs(n+Lp) - x_cs(n);
     sxt = (CXT(n+Lp) - CXT(n)) - (n-1) * sx;
-    
+
     t_mid = (Lp + 1) / 2;
     sxt_center = sxt - t_mid * sx;
-    
+
     % Beta for centered coordinates: [1, t_center] are orthogonal
     % sum(t_center) = 0, sum(t_center^2) = Lp*(Lp^2-1)/12
     b1 = sx / Lp;
     b2 = sxt_center / (Lp * (Lp^2 - 1) / 12);
-    
+
     % pd(k) = x(n+k-1) - (b1 + b2*(k - t_mid))
     %       = x(n+k-1) - ((b1 - b2*t_mid) + b2*k)
     intercept = b1 - b2 * t_mid;
     slope     = b2;
 
     % SumPD_vec(p+1) = sum_{k=1}^p (x(n+k-1) - (intercept + slope*k))
-    SumPD_vec = (CX(n+p_range) - CX(n)) - (intercept * T1 + slope * T2);
+    SumPD_vec = (x_cs(n+p_range) - x_cs(n)) - (intercept * T1 + slope * T2);
 
     % Reflection: CE has 3 parts [rev(pd); pd; rev(pd)]
     % SR(p+1) = cumsum([0; rev(pd)], p)
