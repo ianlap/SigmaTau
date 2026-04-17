@@ -106,7 +106,7 @@ function run_one_sample(idx::Integer;
         h_vec,
         p.fpm_present,
         opt_nll,
-        true,
+        opt_res.converged,
     )
 end
 
