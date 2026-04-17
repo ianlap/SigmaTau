@@ -1,15 +1,29 @@
 """
     SigmaTau
 
-Frequency stability analysis and clock steering.
+Frequency stability analysis and clock steering. Export groups (see `export`
+blocks below for the full list):
 
-Exports:
-- `DeviationResult`: result struct for all deviation computations
-- `DevParams`: engine configuration struct (used by deviation wrappers)
-- `engine`: shared deviation computation engine
-- `compute_ci`: fill EDF and confidence intervals on a result
-- `bias_correction`: bias factor lookup (totvar / mtot / htot)
-- `noise_id`: power-law noise identification (SP1065 §5.6)
+- **Deviations (10 functions):** `adev`, `mdev`, `tdev`, `hdev`, `mhdev`,
+  `ldev`, `totdev`, `mtotdev`, `htotdev`, `mhtotdev`.
+- **Deviation engine / CI:** `engine`, `DevParams`, `DeviationResult`,
+  `compute_ci`, `bias_correction`, `edf_for_result`, `unpack_result`.
+- **Input validation:** `validate_phase_data`, `validate_tau0`.
+- **Noise identification (SP1065 §5.6):** `noise_id`.
+- **Noise fitting (MHDEV → q):** `mhdev_fit`, `MHDevFitResult`,
+  `MHDevFitRegion`.
+- **Noise generation (Kasdin & Walter):** `generate_power_law_noise`,
+  `generate_composite_noise`.
+- **Clock models:** `ClockNoiseParams`, `ClockModel2`, `ClockModel3`,
+  `ClockModelDiurnal`, `build_phi`, `build_Q`, `build_H`, `nstates`,
+  `sigma_y_theory`, `steady_state_covariance`, `steady_state_gain`.
+- **h↔q conversion (Wu 2023 convention):** `h_to_q`, `q_to_h`.
+- **Kalman filter:** `kalman_filter` (alias `kf_filter`), `KalmanResult`,
+  `predict_holdover`, `HoldoverResult`.
+- **NLL optimization / ALS tuning:** `optimize_nll`, `innovation_nll`,
+  `als_fit`, `OptimizeNLLResult`.
+- **ML features (for dataset-to-q regression):** `CANONICAL_TAU_GRID`,
+  `CANONICAL_M_LIST`, `FEATURE_NAMES`, `compute_feature_vector`.
 """
 module SigmaTau
 

@@ -25,10 +25,12 @@ x = [s, f, d]ᵀ
 
 Encodes constant-velocity/constant-acceleration kinematics over interval τ.
 
-**Implementation** (`julia/src/filter.jl:build_phi!`):
+**Implementation** (`julia/src/clock_model.jl:build_phi`):
 
 ```julia
-Φ[1,2] = τ;  Φ[1,3] = τ^2/2;  Φ[2,3] = τ
+[1.0  τ    τ²/2;
+ 0.0  1.0  τ;
+ 0.0  0.0  1.0]
 ```
 
 **Status**: ✓ Verified against MB23 §13.5.6.
@@ -52,7 +54,7 @@ MB23 §13.5.4; SP1065 noise model):
 
 White PM noise (`q_wpm`) does not enter Q — it is the measurement noise R.
 
-**Implementation** (`julia/src/filter.jl:build_Q!`): exact formulas as above.
+**Implementation** (`julia/src/clock_model.jl:build_Q`): exact formulas as above.
 
 **Status**: ✓ Verified. τ-power coefficients (τ, τ³/3, τ⁵/20, τ²/2, τ⁴/8, τ³/6)
 are exact results of continuous-time integration — do not approximate.
@@ -108,4 +110,4 @@ x_pred[1] += steer · τ    # phase correction
 x_pred[2] += steer        # frequency correction
 ```
 
-**Status**: ✓ Verified against legacy `filter.jl` lines 138–146 and MB23 §13.6.
+**Status**: ✓ Verified against `julia/src/filter.jl:step!` (`PIDController`) and MB23 §13.6.
