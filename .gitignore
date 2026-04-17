@@ -38,7 +38,9 @@ examples/noise_id_validation/*.csv
 examples/6krb25apr/stable32_out/*.txt
 
 # AI Tooling & Context
-.claude/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/
 .gemini/
 devplans/
 gha-creds-*.json
