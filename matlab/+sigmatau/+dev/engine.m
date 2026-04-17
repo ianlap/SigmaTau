@@ -7,8 +7,9 @@ function result = engine(x, tau0, m_list, kernel, params, varargin)
 %     x       – phase data (or frequency data if data_type='freq')
 %     tau0    – sampling interval (s)
 %     m_list  – averaging factors [], or empty [] for auto-generated octave-spaced
-%     kernel  – function handle @(x, m, tau0) → [variance, neff]
+%     kernel  – function handle @(x, m, tau0, x_cs) → [variance, neff]
 %               kernels return VARIANCE; engine takes sqrt
+%               x_cs = cumsum([0; x(:)]), length N+1, shared across kernels
 %     params  – struct with fields:
 %                 .name        – deviation identifier ('adev', 'mdev', ...)
 %                 .min_factor  – N/m ratio for default m_list (2, 3, or 4)
@@ -65,11 +66,14 @@ dev  = NaN(1, L);
 neff = zeros(1, L);
 edf  = NaN(1, L);
 
+% Precompute prefix sums once for kernels that use them (mdev, mhdev, etc)
+x_cs = cumsum([0; x(:)]);
+
 T_rec = (N - 1) * tau0;   % record duration for total deviation EDF
 
 for k = 1:L
     m = m_list(k);
-    [var_val, n] = kernel(x, m, tau0);
+    [var_val, n] = kernel(x, m, tau0, x_cs);
 
     if n <= 0 || isnan(var_val)
         dev(k)  = NaN;

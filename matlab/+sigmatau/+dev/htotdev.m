@@ -27,7 +27,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @htotdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = htotdev_kernel(x, m, tau0)
+function [v, neff] = htotdev_kernel(x, m, tau0, ~)
 % m==1: HDEV third differences on phase (CLAUDE.md critical rule).
 % m>1:  frequency segment algorithm with half-average detrend + reflection.
 N = numel(x);

@@ -25,7 +25,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @mtotdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = mtotdev_kernel(x, m, tau0)
+function [v, neff] = mtotdev_kernel(x, m, tau0, x_cs)
 % Accumulate variance over all N-3m+1 subsegments.
 % Each segment: half-average detrend → symmetric reflection → cumsum second-diff.
 N     = numel(x);
@@ -39,7 +39,6 @@ seg_len   = 3*m;
 half_n    = seg_len / 2;
 outer_sum = 0.0;
 
-CX      = cumsum([0; x]);
 p_range = (0:seg_len)';
 T2      = p_range .* (p_range - 1) / 2;
 j_range = (0:6*m-1)';
@@ -50,13 +49,13 @@ for n = 1:nsubs
         slope = (x(n+2) - x(n)) / (2*tau0);
     else
         hi = floor(half_n);
-        s1 = (CX(n+hi) - CX(n)) / hi;
-        s2 = (CX(n+seg_len) - CX(n+hi)) / (seg_len - hi);
+        s1 = (x_cs(n+hi) - x_cs(n)) / hi;
+        s2 = (x_cs(n+seg_len) - x_cs(n+hi)) / (seg_len - hi);
         slope = (s2 - s1) / (half_n * tau0);
     end
 
     % SumS_vec(p+1) = sum_{i=1}^p (x(n+i-1) - slope*tau0*(i-1))
-    SumS_vec = (CX(n+p_range) - CX(n)) - slope * tau0 * T2;
+    SumS_vec = (x_cs(n+p_range) - x_cs(n)) - slope * tau0 * T2;
 
     % Reflection: 3 parts [rev(seq_det); seq_det; rev(seq_det)]
     S_end = SumS_vec(end);

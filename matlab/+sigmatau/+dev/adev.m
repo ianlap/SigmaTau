@@ -31,7 +31,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @adev_kernel, params, varargin{:});
 end
 
-function [v, neff] = adev_kernel(x, m, tau0)
+function [v, neff] = adev_kernel(x, m, tau0, ~)
 % ADEV_KERNEL  Allan variance kernel for sigmatau.dev.engine.
 %
 %   SP1065 Eq. 14: AVAR(tau) = mean((x(n+2m) - 2x(n+m) + x(n))^2) / (2*m^2*tau0^2)

@@ -8,11 +8,18 @@ using LinearAlgebra
 """
     als_fit(data, tau0; kwargs...) -> ClockNoiseParams
 
-Optimize parameters iteratively via the Autocovariance Least Squares (ALS) method.
+Optimize parameters iteratively via the Autocovariance Least Squares (ALS) method
+(Åkesson 2008 / Odelson 2006).
+
+By default `optimize_qwpm=false`: `q_wpm` (= measurement noise `R`) is held at
+its seed value, matching MATLAB `sigmatau.kf.optimize` and `optimize_nll` —
+the textbook tuning problem where `R` is known from the short-τ WPM floor or
+the measurement-chain calibration. Pass `optimize_qwpm=true` to sweep `R`
+jointly with the diffusion parameters.
 
 # Keyword Arguments
 - `h_init`, `noise_init` — initial parameter seeds.
-- `optimize_qwpm` (default: `true`) — include measurement noise R in optimization.
+- `optimize_qwpm` (default: `false`) — include measurement noise R in optimization.
 - `optimize_irwfm` (default: `false`) — include Random Run FM in optimization.
 - `lags` (default: `30`) — number of autocovariance lags to consider.
 - `burn_in` (default: `50`) — number of steady-state relaxation steps to ignore.
@@ -22,7 +29,7 @@ Optimize parameters iteratively via the Autocovariance Least Squares (ALS) metho
 function als_fit(data::AbstractVector{<:Real}, tau0::Real;
                  h_init::Union{Nothing,AbstractDict{<:Real,<:Real}}=nothing,
                  noise_init::Union{ClockNoiseParams, Nothing}=nothing,
-                 optimize_qwpm::Bool = true,
+                 optimize_qwpm::Bool = false,
                  optimize_irwfm::Bool = false,
                  lags::Int = 30, max_iter::Int = 5, burn_in::Int = 50, verbose::Bool = true)
     

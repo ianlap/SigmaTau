@@ -83,47 +83,40 @@ function main()
     fit_res = mhdev_fit(τ_mhdev, σ_mhdev, regions)
     @info "mhdev_fit result" q_wpm=fit_res.q_wpm q_wfm=fit_res.q_wfm q_rwfm=fit_res.q_rwfm
 
-    # --- Fit 2: optimize_kf_nll on a windowed subset (full 3M is too slow) ---
+    # --- Fit 2: optimize_nll on a windowed subset (full 3M is too slow) ---
     # Use a long window, say 2^19 = 524k samples (~6 days).
-    # h-warm init from mhdev_fit via the inverse of the analytical mapping.
-    # Analytical forward mapping was:
-    #   q_wpm  = h[2.0] * f_h / (2π²)   → h[2.0]  = q_wpm * 2π² / f_h
-    #   q_wfm  = h[0.0] / 2             → h[0.0]  = 2 * q_wfm
-    #   q_rwfm = (2π²/3) * h[-2.0]      → h[-2.0] = 3 * q_rwfm / (2π²)
-    f_h = 1.0 / (2τ₀)
-    h_init = Dict(
-         2.0 => fit_res.q_wpm  * 2π^2 / f_h,
-         0.0 => 2 * fit_res.q_wfm,
-        -2.0 => 3 * fit_res.q_rwfm / (2π^2),
-    )
-    # Enforce positivity (mhdev_fit may yield zeros for unused regions)
-    for (α, v) in collect(h_init)
-        if v <= 0
-            @warn "h_init $α was non-positive $(v); defaulting" α=α
-            h_init[α] = 10.0 ^ (α == 2.0 ? -22 : (α == 0.0 ? -22 : -26))
-        end
+    # Warm-start from mhdev_fit's q values directly via ClockNoiseParams;
+    # optimize_qwpm=false fixes R at its analytical value, preserving the
+    # pre-refactor optimize_kf_nll semantic.
+    q_wpm_init  = fit_res.q_wpm  > 0 ? fit_res.q_wpm  : 1e-22
+    q_wfm_init  = fit_res.q_wfm  > 0 ? fit_res.q_wfm  : 1e-22
+    q_rwfm_init = fit_res.q_rwfm > 0 ? fit_res.q_rwfm : 1e-30
+    if !(fit_res.q_wpm > 0 && fit_res.q_wfm > 0 && fit_res.q_rwfm > 0)
+        @warn "mhdev_fit yielded non-positive q(s); defaults applied for NLL warm-start"
     end
-    @info "h_init from mhdev_fit (for NLL warm start)" h_plus2=h_init[2.0] h_0=h_init[0.0] h_minus2=h_init[-2.0]
+    noise_init = ClockNoiseParams(q_wpm = q_wpm_init,
+                                  q_wfm = q_wfm_init,
+                                  q_rwfm = q_rwfm_init)
+    @info "noise_init for NLL warm start" q_wpm=q_wpm_init q_wfm=q_wfm_init q_rwfm=q_rwfm_init
 
     window_N = min(2^19, length(ph))
-    nll_res = optimize_kf_nll(view(ph, 1:window_N), τ₀;
-                              h_init = h_init, verbose=false, max_iter=1000)
-    @info "optimize_kf_nll result" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_res.converged
+    opt_res = optimize_nll(view(ph, 1:window_N), τ₀;
+                           noise_init = noise_init,
+                           optimize_qwpm = false,
+                           verbose = false,
+                           max_iter = 1000)
+    nll_res       = opt_res.noise
+    nll_converged = opt_res.converged
+    @info "optimize_nll result" q_wpm=nll_res.q_wpm q_wfm=nll_res.q_wfm q_rwfm=nll_res.q_rwfm converged=nll_converged
 
     # --- Theoretical ADEV from each fit ---
-    # For KF 3-state q params:
-    #   σ²_y(τ) = 3·q_wpm/τ² + q_wfm/τ + q_rwfm·τ · (something)
-    # Use the SP1065 mapping through h's:
-    #   h[2]    → σ²_y(τ) = 3·f_h·h[2]/(4π²·τ²)   (WPM)
-    #   h[0]    → σ²_y(τ) = h[0]/(2τ)              (WFM)
-    #   h[-2]   → σ²_y(τ) = h[-2] · (2π²/3) · τ    (RWFM)
+    # Direct q → σ_y(τ) under the Wu 2023 clock-model convention
+    # (matches julia/src/clock_model.jl h_to_q / q_to_h):
+    #   σ²_y,WPM(τ)  = 3·q_wpm / τ²
+    #   σ²_y,WFM(τ)  = q_wfm / τ
+    #   σ²_y,RWFM(τ) = q_rwfm · τ / 3
     function adev_from_q(q_wpm, q_wfm, q_rwfm, τ_vec)
-        # Invert the q↔h mapping to recover h's, then use the SP1065 formulas.
-        h_plus2  = q_wpm * 2π^2 / f_h
-        h_0      = 2 * q_wfm
-        h_minus2 = 3 * q_rwfm / (2π^2)
-        # Theoretical two-sided PSDs sum; ADEV^2 is:
-        σ2 = [3 * f_h * h_plus2 / (4π^2 * τ^2) + h_0 / (2τ) + h_minus2 * (2π^2/3) * τ for τ in τ_vec]
+        σ2 = [3 * q_wpm / τ^2 + q_wfm / τ + q_rwfm * τ / 3 for τ in τ_vec]
         return sqrt.(max.(σ2, 0.0))
     end
 
@@ -174,23 +167,25 @@ function main()
         println(io, @sprintf("q_wfm   = %.3e   (log10 = %.3f)", fit_res.q_wfm,  log10(max(fit_res.q_wfm,  1e-99))))
         println(io, @sprintf("q_rwfm  = %.3e   (log10 = %.3f)", fit_res.q_rwfm, log10(max(fit_res.q_rwfm, 1e-99))))
         println(io, "")
-        println(io, "--- optimize_kf_nll (window N=", window_N, ") ---")
+        println(io, "--- optimize_nll (window N=", window_N, ") ---")
         println(io, @sprintf("q_wpm   = %.3e   (log10 = %.3f)", nll_res.q_wpm,  log10(max(nll_res.q_wpm,  1e-99))))
         println(io, @sprintf("q_wfm   = %.3e   (log10 = %.3f)", nll_res.q_wfm,  log10(max(nll_res.q_wfm,  1e-99))))
         println(io, @sprintf("q_rwfm  = %.3e   (log10 = %.3f)", nll_res.q_rwfm, log10(max(nll_res.q_rwfm, 1e-99))))
-        println(io, "converged: ", nll_res.converged)
+        println(io, "converged: ", nll_converged)
         println(io, "")
-        println(io, "Implied h_α (from q values via inverse mapping):")
-        for (name, q1, q2, q3) in [
-            ("mhdev", fit_res.q_wpm, fit_res.q_wfm, fit_res.q_rwfm),
-            ("nll",   nll_res.q_wpm, nll_res.q_wfm, nll_res.q_rwfm),
+        println(io, "Implied h_α (from q values via q_to_h; Wu 2023 convention):")
+        for (name, q_params) in [
+            ("mhdev", ClockNoiseParams(q_wpm=max(fit_res.q_wpm, 1e-99),
+                                       q_wfm=max(fit_res.q_wfm, 1e-99),
+                                       q_rwfm=max(fit_res.q_rwfm, 1e-99))),
+            ("nll",   ClockNoiseParams(q_wpm=max(nll_res.q_wpm, 1e-99),
+                                       q_wfm=max(nll_res.q_wfm, 1e-99),
+                                       q_rwfm=max(nll_res.q_rwfm, 1e-99))),
         ]
-            h2 = q1 * 2π^2 / f_h
-            h0 = 2 * q2
-            hm = 3 * q3 / (2π^2)
-            println(io, "  $name: log10(h_+2)=", @sprintf("%.2f", log10(max(h2, 1e-99))),
-                                "  log10(h_0)=",  @sprintf("%.2f", log10(max(h0, 1e-99))),
-                                "  log10(h_-2)=", @sprintf("%.2f", log10(max(hm, 1e-99))))
+            h = q_to_h(q_params, Float64(τ₀))
+            println(io, "  $name: log10(h_+2)=", @sprintf("%.2f", log10(max(h.h2, 1e-99))),
+                                "  log10(h_0)=",  @sprintf("%.2f", log10(max(h.h0, 1e-99))),
+                                "  log10(h_-2)=", @sprintf("%.2f", log10(max(h.h_2, 1e-99))))
         end
     end
     println(read(log_path, String))

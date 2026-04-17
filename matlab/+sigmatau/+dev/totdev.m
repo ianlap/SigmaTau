@@ -28,7 +28,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @totdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = totdev_kernel(x, m, tau0)
+function [v, neff] = totdev_kernel(x, m, tau0, ~)
 % Linear detrend + symmetric reflection, then overlapping second differences.
 % SP1065 §5.2.11 Eq. 25: denominator uses 2τ²(N-2) for phase form.
 N  = numel(x);

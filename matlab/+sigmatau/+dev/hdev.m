@@ -24,7 +24,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @hdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = hdev_kernel(x, m, tau0)
+function [v, neff] = hdev_kernel(x, m, tau0, ~)
 % SP1065 HVAR: HVAR(tau) = mean(d3^2) / (6*m^2*tau0^2)
 N = numel(x);
 L = N - 3*m;

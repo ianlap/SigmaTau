@@ -26,7 +26,7 @@ params = struct( ...
 result = sigmatau.dev.engine(x, tau0, m_list, @mdev_kernel, params, varargin{:});
 end
 
-function [v, neff] = mdev_kernel(x, m, tau0)
+function [v, neff] = mdev_kernel(x, m, tau0, x_cs)
 % MDEV_KERNEL  Modified Allan variance kernel for sigmatau.dev.engine.
 %
 %   Uses cumsum prefix sums for O(N) computation per m.
@@ -37,10 +37,9 @@ if Ne <= 0
     v = NaN; neff = 0;
     return;
 end
-S  = cumsum([0; x(:)]);
-s1 = S(1+m:Ne+m)     - S(1:Ne);
-s2 = S(1+2*m:Ne+2*m) - S(1+m:Ne+m);
-s3 = S(1+3*m:Ne+3*m) - S(1+2*m:Ne+2*m);
+s1 = x_cs(1+m:Ne+m)     - x_cs(1:Ne);
+s2 = x_cs(1+2*m:Ne+2*m) - x_cs(1+m:Ne+m);
+s3 = x_cs(1+3*m:Ne+3*m) - x_cs(1+2*m:Ne+2*m);
 d  = (s3 - 2*s2 + s1);
 v  = sum(d.^2) / (Ne * 2 * m^4 * tau0^2);
 neff = Ne;
