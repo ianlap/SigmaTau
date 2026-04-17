@@ -220,14 +220,12 @@ function main()
     end
 
     # --- File1 q-values (hardcoded from a prior run of real_data_fit.jl) ---
-    # NOTE: captured under the pre-Wu-2023 q↔h convention. Under the current
-    # Wu 2023 convention (julia/src/clock_model.jl h_to_q / q_to_h), re-running
-    # real_data_fit.jl will produce different numerics. Re-run and update these
-    # if exact values matter; otherwise the combined plot's file1 theoretical
-    # curves and h_α summary are stale (see FIX_PARKING_LOT.md).
-    f1_q_wpm_nll = 7.033e-20; f1_q_wfm_nll = 2.378e-22; f1_q_rwfm_nll = 1.014e-29
-    f1_q_wpm_mhdev = 6.826e-20; f1_q_wfm_mhdev = 1.212e-22; f1_q_rwfm_mhdev = 2.924e-31
-    f1_N = 3001736
+    # Captured 2026-04-17 from real_data_fit.jl with the 524288-sample subset
+    # (N = optimize_nll window). Wu 2023 q↔h convention (julia/src/clock_model.jl).
+    # For full-3M values, re-run real_data_fit.jl without the temp cap.
+    f1_q_wpm_nll = 6.947e-20; f1_q_wfm_nll = 2.422e-22; f1_q_rwfm_nll = 1.010e-29
+    f1_q_wpm_mhdev = 6.947e-20; f1_q_wfm_mhdev = 1.163e-22; f1_q_rwfm_mhdev = 2.508e-31
+    f1_N = 524288
     f1_converged = true
     f1_τ₀ = 1.0
     # Re-compute theoretical ADEV for file1 on its τ grid

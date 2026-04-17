@@ -50,7 +50,9 @@ MHDEV_CSV  = KF_DIR / "mhdev_preview.csv"
 OUT        = KF_DIR / "kf_optimization.png"
 OUT_MHDEV  = KF_DIR / "kf_mhdev_comparison.png"
 
-# Legacy MHDEV power-law coefficients (matlab/legacy/kflab/mhdev_fit.m):
+# MHDEV-vs-q coefficients. Consistent with Wu 2023 q↔h (verified by fitting
+# pure-h_-2 synthetic noise through mhdev_fit and recovering q_rwfm ≈ 2π²·h_-2).
+# Canonical source: julia/src/noise_fit.jl (same coefficients). Keep in sync.
 #   σ²_MHDEV = (10/3)·q_wpm·τ^-3 + (7/16)·q_wfm·τ^-1 + (1/9)·q_rwfm·τ^+1
 MHDEV_COMPONENTS = (
     ("wpm",  -3, 10 / 3, "tab:red"),

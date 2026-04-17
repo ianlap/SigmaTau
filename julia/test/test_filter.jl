@@ -181,14 +181,14 @@ using LinearAlgebra
         h = Dict(2.0 => 1e-22, 0.0 => 1e-22, -2.0 => 1e-26)
         x = generate_composite_noise(h, 2^14, 1.0; seed=55)
         res = optimize_nll(x, 1.0; h_init=h, verbose=false, optimize_qwpm=true)
-        f_h = 0.5
-        q_wpm_exp  = h[2.0] * f_h / (4π^2)
-        q_wfm_exp  = h[0.0] / 2.0
-        q_rwfm_exp = (2π^2 / 3.0) * h[-2.0]
+        expected = h_to_q(h, 1.0)
         @test res isa OptimizeNLLResult
-        @test abs(log10(res.noise.q_wpm)  - log10(q_wpm_exp))  < 1.0
-        @test abs(log10(res.noise.q_wfm)  - log10(q_wfm_exp))  < 1.0
-        @test abs(log10(res.noise.q_rwfm) - log10(q_rwfm_exp)) < 1.0
+        @test abs(log10(res.noise.q_wpm)  - log10(expected.q_wpm))  < 1.0
+        @test abs(log10(res.noise.q_wfm)  - log10(expected.q_wfm))  < 1.0
+        # Tight RWFM tolerance: log10(3) ≈ 0.48 discriminates Wu 2023 (2π²·h_-2)
+        # from pre-Wu legacy ((2π²/3)·h_-2). 0.3 = factor 2, well inside the
+        # expected statistical spread at N=16384 and strictly below the 3x gap.
+        @test abs(log10(res.noise.q_rwfm) - log10(expected.q_rwfm)) < 0.3
     end
 
 end  # @testset "Kalman filter"
