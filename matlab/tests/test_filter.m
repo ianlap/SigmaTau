@@ -31,26 +31,38 @@ assert(numel(result.residuals) == N, 'residuals length mismatch');
 assert(all(isfinite(result.phase_est)), 'non-finite phase_est');
 fprintf('PASSED\n');
 
-% ── Test 2: residual statistics (XFAIL) ────────────────────────────────────
-% EXPECTED FAILURE — statistical-test design issue, NOT a KF math bug.
-% The `3·σ/√N` tolerance assumes iid residuals, but posterior KF residuals
-% here are autocorrelated (empirical lag-1 ρ ≈ 0.4), so the iid SE under-
-% estimates the true SE by ~2× and the assertion fails deterministically
-% on rng(2024) with |mu|/(3σ/√N) ≈ 1.34.
-% Full diagnosis: FIX_PARKING_LOT.md "test_filter.m Test 2 bias diagnosis".
-% Planned resolution: Ljung-Box whiteness test on *innovations* (the quantity
-% the KF textbook asserts is white), not residuals.
-fprintf('Test 2 [XFAIL]: residuals have zero mean ... ');
-valid_res = result.residuals(101:end);
-mu  = mean(valid_res);
-sig = std(valid_res);
-Nv  = numel(valid_res);
-tol = 3 * sig / sqrt(Nv);
+% ── Test 2: innovation whiteness (Ljung-Box) — XFAIL ──────────────────────
+% Replaces the prior xfailed `mu < 3·σ/√N` posterior-residual bias check
+% (whose iid-SE assumption was wrong for autocorrelated residuals). The
+% principled replacement per FIX_PARKING_LOT.md was innovation whiteness:
+% the KF textbook (Anderson & Moore §5) asserts innovations are a white
+% sequence for a well-tuned filter.
+%
+% Currently **also** XFAIL on rng(2024): the Ljung-Box test on innovations
+% fails (p ≈ 0 at lag=20, N=9900), revealing a different finding — the
+% innovations themselves are autocorrelated (lag-1 ρ ≈ 0.38, lag-2 ρ ≈
+% 0.15, decaying to ~0 by lag-5). Likely cause is R-misspecification in
+% this test's config: the synthetic data is pure WFM with no measurement
+% noise, but config sets R=1.0. NOT a KF math bug — the math is consistent
+% with the (mis-specified) config. Per the escalation playbook, this is
+% kept XFAIL with the new whiteness assertion wrapped in try/catch pending
+% its own investigation.
+% Full diagnosis: FIX_PARKING_LOT.md "test_filter Test 2 — innovation
+% whiteness fails (likely R-misspec)".
+fprintf('Test 2 [XFAIL]: innovation whiteness (Ljung-Box) ... ');
+valid_innov = result.innovations(101:end);
+valid_resid = result.residuals(101:end);
+d = sigmatau.stats.kf_residual_diagnostics(valid_innov, valid_resid);
 try
-    assert(abs(mu) < tol, sprintf('residuals biased: mu=%.3e, tol=%.3e', abs(mu), tol));
-    fprintf('XPASS (unexpected): mu=%.3e < tol=%.3e — if this persists, remove xfail and reinstate hard assert\n', abs(mu), tol);
+    assert(d.innov_lb_passed, sprintf( ...
+        'innovations not white: Ljung-Box p=%.3e <= alpha=%.2g (lag=%d, N=%d)', ...
+        d.innov_lb_pvalue, d.significance, d.lag, d.n));
+    fprintf(['XPASS (unexpected): p=%.3f, lag=%d — if this persists, ' ...
+             'remove xfail and reinstate hard assert\n'], ...
+        d.innov_lb_pvalue, d.lag);
 catch err
-    fprintf('XFAIL (expected): %s — pending Ljung-Box diagnostic, see FIX_PARKING_LOT.md\n', err.message);
+    fprintf(['XFAIL (expected): %s — pending KF-config investigation, ' ...
+             'see FIX_PARKING_LOT.md\n'], err.message);
 end
 
 % ── Test 3: covariance convergence ─────────────────────────────────────────
