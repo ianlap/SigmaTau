@@ -111,4 +111,4 @@ so reproducibility does not depend on Julia's default RNG.
 
 Full rationale — motivation, crossover math, algorithm, risks, success
 criteria — lives in
-`docs/superpowers/specs/2026-04-13-mixed-noise-validation-dataset-design.md`.
+`docs/archive/2026-04-13-mixed-noise-validation-dataset-design.md`.

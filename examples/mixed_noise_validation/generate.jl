@@ -4,7 +4,7 @@
 # WFM (α=0), and RWFM (α=−2) realisations, scaled so the ADEV slope crosses
 # −1 → −1/2 near τ ≈ 32 and −1/2 → +1/2 near τ ≈ 512.
 #
-# Spec: docs/superpowers/specs/2026-04-13-mixed-noise-validation-dataset-design.md
+# Spec: docs/archive/2026-04-13-mixed-noise-validation-dataset-design.md
 #
 # Run from the julia/ directory:
 #     julia --project=. ../examples/mixed_noise_validation/generate.jl

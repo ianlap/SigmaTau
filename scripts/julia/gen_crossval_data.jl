@@ -2,7 +2,7 @@
 gen_crossval_data.jl — Generate cross-validation reference data (stdlib only).
 
 Run from repo root:
-    julia --project=julia julia/scripts/gen_crossval_data.jl
+    julia --project=julia scripts/julia/gen_crossval_data.jl
 
 Outputs to matlab/tests/:
   crossval_phase_wpm.txt / wfm.txt / rwfm.txt  — N=1024 phase data, 17 digits

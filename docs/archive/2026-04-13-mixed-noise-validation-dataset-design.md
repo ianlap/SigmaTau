@@ -1,4 +1,9 @@
-# Mixed-Noise Validation Dataset — Design
+# Mixed-Noise Validation Dataset — Design (ARCHIVED)
+
+> **Archived 2026-04-17.** This spec is fully executed — the deliverables
+> live at `examples/mixed_noise_validation/` (`generate.jl`, `mixed_noise.txt`,
+> `reference/*.csv`, `README.md`). Retained for the design rationale;
+> consult the live example directory for the current artifacts.
 
 **Date:** 2026-04-13
 **Purpose:** Create a reproducible 2^15-point mixed-noise phase dataset for cross-validating SigmaTau against Stable32 and allantools, with particular emphasis on exercising noise-identification dispatch and bias-correction branches across multiple τ regimes.
