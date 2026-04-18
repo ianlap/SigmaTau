@@ -48,6 +48,7 @@ export KalmanResult, kalman_filter
 export kf_filter                                   # alias for kalman_filter
 export HoldoverResult, predict_holdover
 export optimize_nll, innovation_nll, als_fit, OptimizeNLLResult
+export kf_residual_diagnostics, KFDiagnosticsResult
 export ClockNoiseParams, ClockModel2, ClockModel3, ClockModelDiurnal
 export build_phi, build_Q, build_H, sigma_y_theory, h_to_q, q_to_h, steady_state_covariance, steady_state_gain, nstates
 export generate_power_law_noise
@@ -70,6 +71,7 @@ include("filter.jl")
 include("predict.jl")
 include("optimize.jl")
 include("als_fit.jl")
+include("kf_diagnostics.jl")
 
 # kf_filter is an alias for kalman_filter (matches problem-statement export name)
 const kf_filter = kalman_filter
