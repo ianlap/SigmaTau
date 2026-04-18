@@ -5,6 +5,9 @@ Observations surfaced during fix passes that are out-of-scope for the current fi
 - [scripts/julia/kf_pipeline.jl migration] Rolling-origin RMS scales O((N−maturity)·max_hor). At N=50k, max_hor=40k this is ~95s per KF run; the full 406k-sample dataset would be ~40× longer. An N_STARTS cap (sample K equally-spaced origins instead of all) would trade statistical precision for wall-time.
 - [scripts/python/plot_kf.py coupling] `plot_kf.py` resolves its CSV directory relative to `scripts/python/` (`HERE / "results" / DATASET / "kf"`), but `kf_pipeline.jl` writes to `scripts/julia/results/...`. The two don't meet. Pre-existing; also noted in AUDIT_02.
 - [ml/notebook.py:463 legacy q↔h] The `analytical_adev` helper's inline h-derivation uses pre-Wu `h_+2 = q_wpm·2π²/f_h` (off by factor 2) and `h_-2 = 3·q_rwfm/(2π²)` (off by factor 3). Exploratory notebook only; defer. When notebook is next touched, replace with `q_to_h(ClockNoiseParams(...), tau0)` to share the canonical source.
+- [GEMINI.md §2.3 + Goal G2 stale] MATLAB engine 4-arg migration completed 2026-04-16/17 (commits 69210f3 precompute+dispatch, 2d87b83 mdev/mhdev/mtotdev/mhtotdev, bb699cd adev/hdev/totdev/htotdev, 6e81423 changelog). Current `matlab/+sigmatau/+dev/engine.m:10-12,70,76` declares and passes `kernel(x, m, tau0, x_cs)` and all 10 kernels consume the shared `x_cs`. GEMINI.md §2.3 still states "MATLAB kernels currently use `kernel(x, m, tau0) → [variance, neff]` ... deliberate pre-migration state" with a verification check that points at engine.m:72 (3-arg) — stale. GEMINI.md §7 Goal G2 (MATLAB 4-arg migration tracked as open) is likewise resolved. Refresh both on the next mandate-pass: update §2.3 verification tag + remove G2 from Goals. Not fixed in this session per "no mandate changes outside the three prereq scopes" rule.
+
+## test_filter.m bias diagnosis (Fix 4 / W4 escalation)
 
 ## test_filter.m bias diagnosis (Fix 4 / W4 escalation)
 
