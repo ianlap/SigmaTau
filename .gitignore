@@ -24,6 +24,9 @@ results/
 steering_results/
 examples/*/results/
 
+# Notebook exec logs
+*notebook_exec.log
+
 # Reference data
 !reference/validation/
 reference/raw/

@@ -21,7 +21,7 @@ Refactored code must preserve numerical behavior. Two independent checks cover t
 
    Covered by `matlab/tests/test_noise_slopes.m` and `julia/test/test_allan_family.jl`.
 
-2. **MATLAB ↔ Julia cross-validation (stability deviations only).** Deviation point estimates agree within `REL_TOL = 2e-10`. Scope is the 10 deviations, 3 noise types — **not** EDF, CI, or KF outputs. The test silently skips (warning-only) when the Julia reference file `crossval_results.txt` is missing; regenerate with `julia --project=julia julia/scripts/gen_crossval_data.jl`. There is no equivalent KF cross-validation across languages yet.
+2. **MATLAB ↔ Julia cross-validation (stability deviations only).** Deviation point estimates agree within `REL_TOL = 2e-10`. Scope is the 10 deviations, 3 noise types — **not** EDF, CI, or KF outputs. The test silently skips (warning-only) when the Julia reference file `crossval_results.txt` is missing; regenerate with `julia --project=julia scripts/julia/gen_crossval_data.jl`. There is no equivalent KF cross-validation across languages yet.
 
 See `matlab/tests/test_crossval_julia.m:47` for the tolerance and `:10-14` for the skip-on-missing behavior.
 

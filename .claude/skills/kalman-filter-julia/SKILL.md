@@ -154,6 +154,5 @@ kf    = kalman_filter(phase, model)          # KalmanResult
 hold  = predict_holdover(kf, 3600)           # HoldoverResult (1 hour)
 ```
 
-`scratch_holdover.jl` at the repo root is the only in-tree example that
-exercises this chain end-to-end (AUDIT_01 §3 flagged this reachability gap;
-not fixed in this session).
+`examples/kf_holdover.jl` is the only in-tree example that exercises
+this chain end-to-end.
