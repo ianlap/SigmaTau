@@ -13,6 +13,7 @@ tests = {
     'test_freq_input',
     'test_crossval_julia',
     'test_filter',
+    'test_kf_diagnostics',
 };
 
 passed = 0;
