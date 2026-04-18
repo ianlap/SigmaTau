@@ -1,5 +1,18 @@
 # Audit 02 — Architecture, Module Boundaries, and the "One Package or Two" Question
 
+> **Status update 2026-04-17 — §7 module-level-dead-code findings executed.**
+> See [`AUDIT_03_dead_code.md` §3.4 and §6.1](AUDIT_03_dead_code.md) for
+> which rows have been executed. Closed: `ml/dataset/{generate_dataset,
+> real_data_fit,real_data_fit_file2}.jl` were flagged as broken against
+> `optimize_kf_nll` — **all fixed** to use `optimize_nll`. Corrected:
+> `docs/design/kf_architecture.md` was flagged as untracked — **is
+> tracked**, now archived to `docs/archive/`. `matlab/+sigmatau/+{plot,steering}/`
+> were flagged as empty — **they do not exist** as directories at all.
+> `julia/scratch_als.jl` and `scratch_holdover.jl` placement issues are
+> **resolved** (scratch_als deleted, scratch_holdover promoted to
+> `examples/kf_holdover.jl`). §9 (ML subsystem extraction) and the "one
+> package or two" verdict remain **open**.
+
 **Scope:** module boundaries across Julia/MATLAB/Python/ML subsystems, one-vs-two-package verdict, MATLAB engine-refactor asymmetry, optimizer default divergence, module-level dead code, CLI placement, ML subsystem placement. Performance, test-coverage, and API redesign are out of scope. No file except this one is modified.
 
 ---

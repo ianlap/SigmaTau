@@ -1,5 +1,15 @@
 # Audit 01 — Documentation-vs-Reality and Stale-API Sweep
 
+> **Status update 2026-04-17 — several findings closed.** See
+> [`AUDIT_03_dead_code.md` §3.4 and §6.1](AUDIT_03_dead_code.md) for
+> which rows have been executed. Notably: §3 row 1 (`scripts/julia/kf_pipeline.jl`
+> broken against `KalmanConfig`/`OptimizeConfig`/etc.) is **closed** —
+> the script was rewritten against the current API. README drift items
+> in §4 (rows 1, 2b, 4, 5, 6) are **still open**. Stale-API rows that
+> cite `docs/design/kf_architecture.md` are partially closed — the file
+> has been archived to `docs/archive/kf_architecture_2026-04-16.md` with
+> a tombstone banner.
+
 **Scope:** documentation claims vs. code reality; old-KF-API drift; shape divergence between MATLAB and Julia KF APIs. Architecture, performance, and test-coverage are out of scope (parked for later audits). No file except this one is modified.
 
 ---
