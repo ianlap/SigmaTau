@@ -2,14 +2,14 @@
 
 Frequency stability analysis and Kalman clock steering in MATLAB and Julia.
 
-SigmaTau is a twin-language package for time-and-frequency work: compute the ten NIST SP1065 deviations, identify power-law noise, and run Kalman filters for clock steering and holdover. The MATLAB and Julia implementations mirror each other and cross-validate to machine precision.
+SigmaTau is a twin-language package for time-and-frequency work: compute the ten NIST SP1065 deviations, identify power-law noise, and run Kalman filters for clock steering and holdover. MATLAB and Julia mirror each other for the deviation and noise-ID engines — the ten deviation point estimates cross-validate within `REL_TOL = 2e-10` on canonical noise types. The Kalman filter is Julia-first; the MATLAB `+kf/` package mirrors the legacy pre-refactor interface and is maintained as a numerical reference target.
 
 ## What's in the box
 
 - **Deviations** — `adev`, `mdev`, `hdev`, `mhdev`, `totdev`, `mtotdev`, `htotdev`, `mhtotdev`, `tdev`, `ldev`. All share one engine, accept phase or frequency data, and return point estimates plus EDF-based confidence intervals.
 - **Noise identification** — lag-1 ACF for long records, B1/R(n) ratio fallback for short ones. Returns SP1065 α ∈ {-2, -1, 0, 1, 2}.
-- **Kalman filter** — three-state clock model, Q-parameter grid-search optimizer, multi-step prediction/holdover, and an end-to-end pipeline (data → deviation → noise fit → KF).
-- **Plots** — log–log σ(τ) with CI bands. In Julia, loaded as a package extension so `using SigmaTau` stays light.
+- **Kalman filter** — 2-, 3-, and diurnal 5-state clock models (Julia; MATLAB is 3-state); Nelder-Mead optimizer on Zucca–Tavella diffusion parameters; multi-step holdover prediction; end-to-end CLI pipeline (data → deviation → noise fit → KF).
+- **Plots** — log–log σ(τ) with CI bands. `using SigmaTau` currently pulls `Plots.jl` as a direct dependency; migration to a package extension is tracked in `TODO.md`.
 
 ## Install
 
@@ -32,14 +32,16 @@ Then `using SigmaTau`.
 MATLAB:
 ```matlab
 [tau, dev, ci, alpha] = sigmatau.dev.adev(phase, tau0);
-result = sigmatau.kf.pipeline(phase, tau0);
+% End-to-end KF pipeline: see scripts/matlab/kf_pipeline.m
 ```
 
 Julia:
 ```julia
 using SigmaTau
-result = adev(phase, tau0)             # result.tau, result.dev, result.ci, result.alpha
-kf     = kf_pipeline(phase, tau0)
+result = adev(phase, tau0)             # result.tau, result.deviation, result.ci, result.alpha
+
+# Function-level KF: see examples/kf_holdover.jl
+# CLI end-to-end pipeline: julia --project=julia scripts/julia/kf_pipeline.jl <dataset>
 ```
 
 Both accept `data_type = :freq` to pass frequency data instead of phase — the engine handles the conversion.
