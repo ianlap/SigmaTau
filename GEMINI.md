@@ -186,6 +186,9 @@ These are tracked aspirations. They are *not* binding rules — failing a goal i
   Resolution requires either a new measurement or an explicit product decision. Deferred until post-PH-551. Do not silently migrate the constant to 30 without sign-off.
   _[Verified 2026-04-16 — check: `julia/src/noise.jl:24` (`const NEFF_RELIABLE = 50`), `matlab/+sigmatau/+noise/noise_id.m:28` (`NEFF_RELIABLE = 50`); inline empirical comments at `julia/src/noise.jl:20-23` and `matlab/+sigmatau/+noise/noise_id.m:25-27`; SP1065 §5.6 cited floor is 30.]_
 
+- **G6 — MATLAB KF migration to model-type shape.** MATLAB currently uses struct-config for the Kalman filter (`sigmatau.kf.kalman_filter(data, cfg)` with a flat 14-field struct). Julia uses model-type dispatch (`kalman_filter(data, ::ClockModel3)` with `ClockNoiseParams` nested inside). Unified-design decision: MATLAB moves to match Julia. Implementation: create MATLAB classes `ClockModel2`, `ClockModel3`, `ClockModelDiurnal` with `ClockNoiseParams` as a class or methodized struct. Preserve math and tests. Scope: `matlab/+sigmatau/+kf/` only. Estimated effort: ~1 week. Deferred until post-PH-551. Do not partial-migrate.
+  _[Verified 2026-04-17 — check: `matlab/+sigmatau/+kf/kalman_filter.m:1` takes flat `(data, config)` struct; `julia/src/filter.jl:149` takes `(data, ::ClockModel; kwargs)`. AUDIT_02 §9 documents the shape divergence. Decision locked 2026-04-17 based on user's "unified design, two languages" requirement.]_
+
 ---
 
 ## 8. References
