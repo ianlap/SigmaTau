@@ -135,3 +135,12 @@ caller passed an explicit `P0`).
 
 Keep the `n_fit >= nstates` guard — fewer samples than states makes the
 normal equations singular. `n_fit` clamps to `nstates` from below.
+
+## Diagnostics
+
+For innovation-whiteness / residual-bias checks on a run filter, use
+`kf_residual_diagnostics` — `matlab/+sigmatau/+stats/kf_residual_diagnostics.m`
+or the Julia `SigmaTau` export. Returns Ljung-Box on raw innovations (D1),
+Ljung-Box on normalized innovations (D2, optional), and a naive
+`|μ| < 3σ/√N` posterior-residual bias check (D3, coarse since posterior
+residuals are autocorrelated by construction).
