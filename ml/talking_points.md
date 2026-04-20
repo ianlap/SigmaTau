@@ -112,14 +112,13 @@ doesn't mean anything.
 
 - **Naive:** predict training mean for every sample. RMSE is roughly the
   standard deviation of each target — the 'no model' number.
-- **Linear regression:** sanity check for whether the relationship is
-  simply linear. Spoiler: it's not.
-- **Analytical h-warm-start:** closed-form estimate from σ(τ=1). The
-  physicist's baseline.
+- **MHDEV 3-region fit:** the physicist's baseline — split τ into
+  short/mid/long regions and fit each to its dominant noise-type slope.
+  Requires expert-chosen τ-regions, so real-data only. Shown on slide 13.
 
-Our RF and XGBoost models beat all three by a large margin — which the
-results slide quantifies. Feature–target correlations are monotonic but
-nonlinear, which is what justifies tree models over linear regression."
+Our RF and XGBoost models beat naive by roughly 18×/11×/2× on q0/q1/q2.
+Correlations are monotonic but clearly nonlinear, which is what
+motivates tree ensembles over linear models."
 
 ---
 

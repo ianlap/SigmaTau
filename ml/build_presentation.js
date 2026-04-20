@@ -373,12 +373,11 @@ const TOTAL = 15;
       { text: "Notes",                   options: { bold: true, color: WHITE, fill: { color: NAVY }, fontSize: 11 } }
     ],
     ["Naive (train mean)",     "0.87 / 0.87 / 1.73", "Ignores features (R\u00B2 \u2248 0)"],
-    ["Linear regression",      "(not run)",          "Monotonic but nonlinear signal"],
     ["MHDEV 3-region fit",     "see slide 13",       "Real-data only, requires expert \u03C4-regions"],
     [
       { text: "RF (ours)", options: { bold: true, fill: { color: ICE }, color: ACCENT } },
-      { text: "0.07 / 0.09 / 0.78", options: { bold: true, fill: { color: ICE }, color: ACCENT } },
-      { text: "~12\u00D7 better than naive", options: { bold: true, fill: { color: ICE } } }
+      { text: "0.05 / 0.08 / 0.79", options: { bold: true, fill: { color: ICE }, color: ACCENT } },
+      { text: "~18\u00D7/11\u00D7/2\u00D7 vs naive", options: { bold: true, fill: { color: ICE } } }
     ]
   ], {
     x: 0.4, y: 1.80, w: 4.6, colW: [1.65, 1.45, 1.50],
@@ -395,7 +394,7 @@ const TOTAL = 15;
   s.addText([
     { text: "Correlation pattern above: ", options: { bold: true, color: NAVY } },
     { text: "short-\u03C4 features drive q0; long-\u03C4 features drive q2. ", options: {} },
-    { text: "Monotonic but nonlinear \u2014 justifies tree ensembles over linear regression.",
+    { text: "Relationships are monotonic but clearly nonlinear \u2014 motivates tree ensembles.",
       options: { italic: true, color: MUTED } }
   ], { x: 5.40, y: 3.45, w: 4.3, h: 1.5, fontSize: 11, fontFace: FONT_B, color: INK, margin: 0 });
 
