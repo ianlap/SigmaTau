@@ -126,21 +126,50 @@ motivates tree ensembles over linear models."
 
 "Two models, trained on identical features.
 
-- **Random Forest** — bagged ensemble; trees trained independently on
-  bootstrap samples. Built-in uncertainty via tree-variance (forestci). A
-  strong robustness baseline for tabular data.
-- **XGBoost** — gradient boosting; trees trained sequentially, each
-  correcting the previous errors. Typically 1–3% better RMSE on tabular
-  regression.
+**Random Forest — a bagged ensemble of decision trees.**
+- Each tree is grown on a **bootstrap sample** of the training data
+  (sample N with replacement, ~63% unique rows; the held-out ~37% are
+  'out-of-bag' and used for free validation).
+- At every split, only a **random subset of features** is considered
+  (controlled by `max_features`). This decorrelates the trees so their
+  errors don't all point the same way.
+- Each tree greedily minimizes MSE at every split until a stopping rule
+  fires (`max_depth` or `min_samples_leaf`).
+- Prediction = **average of all tree predictions**. Variance reduction
+  comes from averaging: if trees are roughly independent, ensemble MSE
+  is ≈ single-tree MSE / N_trees. High bias reduction, low variance.
 
-Why both? Different bias–variance tradeoffs, so the head-to-head is
-diagnostic. And they have **independent UQ mechanisms** — forestci is
-analytic, quantile regression is non-parametric — so cross-checking
-coverage between them is much stronger than trusting either alone.
+**XGBoost — gradient boosting of decision trees.**
+- Trees are grown **sequentially**. Tree k+1 is fit not to the target,
+  but to the **residuals (gradients)** of the current ensemble's
+  predictions. Each new tree explicitly patches the previous ensemble's
+  errors.
+- The `learning_rate` η scales each tree's contribution: prediction =
+  Σ η · tree_k(x). Small η + many trees = smoother, more regularized
+  fit — the standard boosting recipe.
+- Row and column **subsampling** (`subsample`, `colsample_bytree`) act
+  like SGD noise: introduce variance to prevent the greedy sequential
+  fit from overfitting.
+- Built-in L1/L2 regularization on leaf weights — something RF doesn't
+  have. Plus **histogram-binned splits** (`tree_method='hist'`) for
+  speed on 196 features × 8000 rows.
 
-Trees are invariant to monotone feature transforms — they don't care that
-some features are log-σ and others are raw ratios. Real practical
-advantage over linear models here."
+**Why both?** They fail differently. RF tends to over-smooth (high bias,
+low variance — can't exploit subtle structure that ~1000 independent
+trees happen to average out). XGB tends to over-fit if you're not
+careful (high variance — each new tree chases the last one's residuals,
+noise included). The head-to-head is **diagnostic**: if RF wins the
+signal is rough; if XGB wins it's smooth enough for sequential
+correction to matter.
+
+They also have **independent UQ mechanisms** (detailed on slide 11) —
+forestci is analytic, quantile regression is non-parametric — so
+cross-checking coverage between them is much stronger than trusting
+either alone.
+
+Both are **invariant to monotone feature transforms** — trees split on
+thresholds, so they don't care that some features are log-σ and others
+are raw ratios. Real practical advantage over linear models here."
 
 ---
 
@@ -158,17 +187,50 @@ n_estimators=1000, min_samples_leaf=1; XGB moves to n_estimators=750,
 learning_rate=0.01, subsample=0.7. That confirms we actually found the
 optimum rather than running out of grid.
 
-Per-parameter justification:
-- **n_estimators:** bias–variance tradeoff vs compute — extended to 2000
-  for RF, 1000 for XGB.
-- **max_depth:** prevents overfit in a 196-dim feature space where trees
-  can memorize pointwise.
-- **min_samples_leaf:** targets span ~6 decades; small leaves can latch
-  onto noise, so this regularizes.
-- **max_features:** {sqrt, 0.3, 0.5, 0.7} brackets the RF-regression
-  regime — strong decorrelation (sqrt ≈ 14/196) through mild (0.7).
-- **learning_rate (XGB):** smaller rate with more trees is the standard
-  recipe for stable convergence; extended low to 0.003."
+Per-parameter — what each actually controls:
+
+**Random Forest**
+- **n_estimators:** number of trees in the ensemble. Ensemble variance
+  drops as ~1/n so predictions stabilize as n grows, but the marginal
+  gain saturates. More trees never hurts accuracy — only compute. We
+  tested up to 2000; winner is 1000.
+- **max_depth:** maximum depth any single tree can grow to. Deeper
+  trees fit finer structure but risk memorizing points; shallower
+  trees under-fit. We settled at 20, which in our 8000-sample training
+  set lets trees reach leaves of ~1–10 samples before depth stops
+  them.
+- **min_samples_leaf:** the minimum number of samples a leaf must hold
+  — the hard floor against tiny leaves. With leaf=1 a tree can split
+  down to individual samples; leaf=5 forces coarser averaging. Winner
+  is 1, meaning the signal is strong enough that individual-sample
+  leaves don't hurt on the test set.
+- **max_features:** how many of the 196 features are considered at
+  **each split**. Smaller values decorrelate the trees more — a tree
+  that only sees 14 (sqrt(196)) random features per split can't latch
+  onto the same dominant feature every time. We tried {sqrt, 0.3, 0.5,
+  0.7}; winner 0.5 — moderate decorrelation, features are correlated
+  enough here that too-aggressive subsampling (sqrt) under-uses the
+  information.
+
+**XGBoost**
+- **n_estimators:** number of boosting rounds. Unlike RF, more is not
+  always better — each new tree chases residuals, so after convergence
+  they start chasing noise. Winner is 750; beyond that CV loss plateaus.
+- **learning_rate (η):** shrinkage applied to each tree's contribution.
+  Small η (0.003) means each tree barely moves the prediction, so you
+  need thousands of trees; large η (0.1) converges in a few rounds but
+  tends to overshoot. Winner 0.01 with 750 rounds — the classic
+  'small rate, many trees' boosting recipe.
+- **max_depth:** how expressive each boosted tree is. Unlike RF where
+  you want deep trees that individually fit well, XGB typically uses
+  shallow trees (3–8) because the boosting loop adds expressiveness
+  across rounds rather than within a tree. Winner 6.
+- **subsample:** what fraction of training rows each tree is fit on.
+  Adds SGD-style noise that prevents sequential overfitting. Winner
+  0.7 — 70% of rows per tree.
+
+All these were selected by 5-fold CV in log₁₀-q space with seed 42,
+stratified by FPM-presence so every fold mirrors the ~30% FPM rate."
 
 ---
 
@@ -196,21 +258,47 @@ Headline box: XGB reduces RMSE ~10× over naive across all three targets."
 ## Slide 11 — Uncertainty quantification (1 min) ← GRAD REQUIREMENT
 
 "This is the grad-student requirement, addressed by two independent
-methods:
+methods — each giving a ±interval around every prediction from a
+different principle.
 
-- **forestci on Random Forest** — computes the infinitesimal jackknife
-  variance from the tree ensemble. Analytic, fast.
-- **Quantile regression on XGBoost** — two additional XGB models with
-  quantile loss at α=0.05 and α=0.95 bracketing the median. Non-parametric,
-  no distributional assumption.
+**forestci on Random Forest — infinitesimal jackknife variance.**
+- Each RF tree was trained on a bootstrap resample. Trees that *didn't*
+  see sample i give independent 'out-of-bag' predictions for it.
+- The infinitesimal jackknife (Efron 2014) estimates the variance of
+  the ensemble prediction by measuring how much each training point
+  influences each tree's output, summed across trees. Concretely:
+  Var(ŷ) ≈ Σᵢ Cov(ŷ_tree, Nᵢ)² over training points i, where Nᵢ is the
+  bootstrap count. forestci implements this; I then form CIs as
+  ŷ ± 1.96·√Var.
+- This is an **analytic, model-based** CI — it captures the ensemble's
+  epistemic uncertainty (disagreement across trees).
 
-The key validation metric is **empirical coverage**: if I claim a 90%
-prediction interval, does it actually contain the truth 90% of the time?
+**Quantile regression on XGBoost — direct percentile estimation.**
+- Standard XGB minimizes MSE → predicts the conditional *mean*.
+  Quantile-loss XGB instead minimizes the **pinball loss** at a chosen
+  α, which drives the model to predict the conditional **α-quantile**
+  of y | x.
+- I train two extra XGB models: one with α=0.05, one with α=0.95. The
+  pair brackets a 90% prediction interval directly — no Gaussian or
+  symmetry assumption on the error.
+- This is **non-parametric** and **asymmetric-friendly** (the low and
+  high quantiles can be different distances from the median), which is
+  useful here because error distributions in log-q space are slightly
+  skewed.
 
-Current coverage on the test set: **q0 ~84%, q1 ~81%, q2 ~81%** — nominal
-is 90%, so we under-cover by 6–10 percentage points. That's mildly
-conservative regularization from XGB; the intervals are real, just a bit
-tight. Honest about this on the limitations slide."
+**Validation — empirical coverage.**
+If I claim a 90% interval, does it actually contain the truth 90% of
+the time? I count the fraction of test samples whose true q lies inside
+the predicted interval, per target.
+
+Current coverage on the held-out test set: **q0 ~84%, q1 ~81%,
+q2 ~81%** — nominal is 90%, so we under-cover by 6–10 percentage
+points. That means the XGB quantile models are producing slightly tight
+intervals; reasonable candidates for the under-coverage are the 8000/2000
+train/test split size and the regularization implicit in n_estimators=750
++ subsample=0.7. The intervals are real; they just need recalibration
+(e.g. a small conformal correction) to hit the nominal level. Called
+out on the limitations slide."
 
 ---
 
