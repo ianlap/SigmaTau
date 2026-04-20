@@ -1,0 +1,18 @@
+{
+  "name": "ml",
+  "version": "1.0.0",
+  "description": "Predicts Kalman-filter process-noise parameters `(q_wpm, q_wfm, q_rwfm)` from frequency-stability curves. Trained on 10,000 synthetic samples drawn from distributions anchored to measured GMR6000 Rb oscillator data; validated on real Rb phase records.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}

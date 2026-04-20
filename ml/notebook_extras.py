@@ -155,53 +155,64 @@ def phaseA_method_comparison(ds, ytr, rf, xgb_m, pred_rf, pred_xgb, F_real, wind
     return fits_df
 
 
-def phaseB_warmstart(ytr, pred_rf):
-    q_naive = 10.0 ** ytr.mean(axis=0)
+def phaseB_holdover_trajectories(ytr, pred_rf, pred_xgb):
+    """Trajectory-averaged 1-day holdover RMS for naive / RF / XGB q triples."""
+    q_naive = 10.0 ** ytr.mean(axis=0)     # (3,)
     n_win = len(pred_rf)
-    inits = DATA_DIR / "q_inits.csv"
-    with inits.open("w") as f:
-        f.write("window,naive_qwpm,naive_qwfm,naive_qrwfm,ml_qwpm,ml_qwfm,ml_qrwfm\n")
-        for i in range(n_win):
-            q_ml = 10.0 ** pred_rf[i]
-            f.write(f"{i},{q_naive[0]:.6e},{q_naive[1]:.6e},{q_naive[2]:.6e},"
-                    f"{q_ml[0]:.6e},{q_ml[1]:.6e},{q_ml[2]:.6e}\n")
-    print(f"wrote {inits.relative_to(ML_DIR)}")
 
-    print("Running warmstart_compare.jl ...")
+    q_methods = DATA_DIR / "q_methods.csv"
+    with q_methods.open("w") as f:
+        f.write("window,method,q_wpm,q_wfm,q_rwfm\n")
+        for i in range(n_win):
+            q_rf  = 10.0 ** pred_rf[i]
+            q_xgb = 10.0 ** pred_xgb[i]
+            rows = [
+                ("naive", q_naive),
+                ("RF",    q_rf),
+                ("XGB",   q_xgb),
+            ]
+            for name, q in rows:
+                f.write(f"{i},{name},{q[0]:.6e},{q[1]:.6e},{q[2]:.6e}\n")
+    print(f"wrote {q_methods.relative_to(ML_DIR)}")
+
+    print("Running holdover_trajectories.jl ...")
     jl_project = str((ML_DIR / "dataset").resolve())
     subprocess.run(
         ["julia", f"--project={jl_project}", "--threads=auto",
-         str(ML_DIR / "dataset" / "warmstart_compare.jl")],
+         str(ML_DIR / "dataset" / "holdover_trajectories.jl")],
         check=True,
     )
 
-    cmp = pd.read_csv(DATA_DIR / "warmstart_compare.csv")
-    print("\nWarm-start comparison:")
-    print(cmp.to_string(index=False))
-    print(f"\nMean speedup  (N_iter_naive / N_iter_ml):   {cmp.speedup_iter.mean():.2f}×")
-    print(f"Mean RMS ratio (RMS_naive  / RMS_ml):        {cmp.rms_ratio.mean():.3f}×")
+    traj = pd.read_csv(DATA_DIR / "holdover_trajectories.csv")
+    print("\nHoldover RMS summary (1-day horizon, trajectory-averaged):")
+    print(traj.to_string(index=False))
 
+    # grouped bars: per window, one bar per method; error bars = std across
+    # trajectory starts
+    methods = ["naive", "RF", "XGB"]
+    colors  = {"naive": "C7", "RF": "C1", "XGB": "C2"}
     fig, ax = plt.subplots(figsize=(10, 5.5))
-    w = cmp["window"].to_numpy()
-    xp = np.arange(len(w))
-    width = 0.38
-    rms_naive = np.where(cmp.rms_naive > 0, cmp.rms_naive, np.nan)
-    rms_ml    = np.where(cmp.rms_ml    > 0, cmp.rms_ml,    np.nan)
-    ax.bar(xp - width/2, rms_naive, width, label="naive seed",  color="C7")
-    ax.bar(xp + width/2, rms_ml,    width, label="ML (RF) seed", color="C1")
-    ax.set_xticks(xp); ax.set_xticklabels(w)
+    wins = sorted(traj["window"].unique())
+    xp = np.arange(len(wins))
+    width = 0.27
+    for j, m in enumerate(methods):
+        ys, errs = [], []
+        for w in wins:
+            row = traj[(traj["window"] == w) & (traj["method"] == m)]
+            if len(row) == 0:
+                ys.append(np.nan); errs.append(0.0)
+                continue
+            ys.append(float(row.rms_mean.iloc[0]))
+            errs.append(float(row.rms_std.iloc[0]))
+        ax.bar(xp + (j - 1) * width, ys, width, yerr=errs,
+               label=m, color=colors[m], capsize=3)
+    ax.set_xticks(xp); ax.set_xticklabels(wins)
     ax.set_xlabel("window")
-    ax.set_ylabel("Holdover phase RMS (s)")
-    ax.set_title("Predicted holdover RMS after ALS tuning — ML seed vs naive seed\n"
-                 "(20% tail, ≈ 104 858 s horizon, log-scale)")
+    ax.set_ylabel("1-day holdover phase RMS (s)")
+    ax.set_title("Trajectory-averaged 1-day holdover RMS — naive / RF / XGB\n"
+                 f"(stride-sampled starts across each 524 288-sample window; log-scale)")
     ax.set_yscale("log")
     ax.legend()
-    for i, row in cmp.iterrows():
-        ymax = np.nanmax([row.rms_naive, row.rms_ml])
-        if np.isfinite(ymax) and ymax > 0:
-            ratio_str = (f"{row.rms_ratio:.1f}× better" if row.rms_ratio >= 1
-                         else f"{1/row.rms_ratio:.1f}× worse")
-            ax.text(i, ymax * 1.5, ratio_str, ha="center", fontsize=10)
     fig.tight_layout()
     out = FIG_DIR / "warmstart_compare.png"
     fig.savefig(out, dpi=150)
@@ -230,8 +241,8 @@ def main():
     print("\n── Phase A: method comparison plot ──")
     phaseA_method_comparison(ds, ytr, rf, xgb_m, pred_rf, pred_xgb, F_real, windows)
 
-    print("\n── Phase B: warm-start (iter + holdover RMS) comparison ──")
-    phaseB_warmstart(ytr, pred_rf)
+    print("\n── Phase B: trajectory-averaged 1-day holdover RMS ──")
+    phaseB_holdover_trajectories(ytr, pred_rf, pred_xgb)
 
 
 if __name__ == "__main__":

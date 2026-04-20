@@ -11,3 +11,17 @@ models/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# Node / pptxgenjs
+node_modules/
+
+# Generated notebooks (source lives in notebook.py; execute on demand)
+notebook.ipynb
+notebook.executed.ipynb
+notebook_exec.log
+
+# Dataset backups
+data/*.prev.h5
+data/*.prev.log
+data/*_nll.h5
+data/*_nll.log

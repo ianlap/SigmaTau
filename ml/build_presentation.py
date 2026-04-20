@@ -292,20 +292,7 @@ add_bullets(s, [
 ],
     left=Inches(0.4), top=Inches(6.0), width=Inches(12.5), height=Inches(1.4), size=12)
 
-# ================ Slide 17: Warm-start comparison ================
-s = slide_with_bar("Warm-start benefit — ML seed vs naive seed (ALS tuning)",
-                   "Holdover phase RMS after ALS converges, per window — ML seed delivers a better-tuned KF")
-add_image(s, FIG / "warmstart_compare.png",
-          left=Inches(2.5), top=Inches(1.6), height=Inches(4.4))
-add_bullets(s, [
-    "ALS converges in 1 outer iteration from any reasonable seed — iteration count is not the discriminator.",
-    "What changes is the final q that ALS lands on, and therefore the forward-prediction RMS on held-out phase.",
-    "ML seed wins decisively on windows 1, 2 (26× and 4600×) — including window 2, where the old NLL-label model failed; naive wins windows 0, 3 by 3-50× (small RMS regime, both seeds good).",
-    "Net: ML wins 2/4 windows by orders of magnitude; naive wins 2/4 by small factors.  Mean RMS ratio naive/ML = 1157×.",
-],
-    left=Inches(0.6), top=Inches(6.15), width=Inches(12.2), height=Inches(1.4), size=13)
-
-# ================ Slide 18: Conclusions ================
+# ================ Slide 17: Conclusions ================
 s = slide_with_bar("Conclusions & next steps",
                    "What worked, what didn't, and where this pipeline goes next")
 add_bullets(s, [
@@ -313,16 +300,16 @@ add_bullets(s, [
     "q_RWFM R² improved from 0.65 → 0.82 after switching labels from NLL to ALS (noise-free targets).",
     "MDEV features carry 5× more predictive signal than MHDEV — drift-rejection sacrifices short-τ WPM/WFM resolution where most discrimination lives.",
     "Real-data validation: ML / MHDEV-fit / ALS track measured ADEV on all 4 GMR6000 windows.",
-    "ALS chosen as the tuning reference — well-conditioned, monotonic convergence from both naive and ML seeds.",
+    "ALS chosen as the label source — noise-free on synthetic (probe: ±10⁻³ dec vs truth; NLL drifted ±8 dec).",
     "",
     "Next steps:",
     "   — expand RF/XGB training range to cover quieter Rb regimes seen in real hardware (q_RWFM ≲ 1e-32)",
-    "   — ensemble ML + ALS: use ML seed, run 1-2 ALS polishing iterations (feed-forward model + bounded tuning)",
-    "   — extend to 4-state drift-RW model for sub-ns long-term holdover",
+    "   — extend to 4-state model with explicit flicker-FM for long-horizon holdover (real Rb exhibits FFM that the 3-state model cannot propagate)",
+    "   — feed-forward ML replaces iterative ALS for production tuning — one model call instead of per-device NLL/ALS run",
 ],
     left=Inches(0.6), top=Inches(1.9), width=Inches(12.2), height=Inches(5), size=16)
 
-# ================ Slide 19: Validation against Stable32 / allantools ================
+# ================ Slide 18: Validation against Stable32 / allantools ================
 s = slide_with_bar("SigmaTau numerical validation",
                    "10 deviation kernels cross-checked against Stable32 + allantools on 8192-sample Rb dataset")
 add_bullets(s, [
@@ -337,7 +324,7 @@ add_bullets(s, [
 ],
     left=Inches(0.6), top=Inches(1.9), width=Inches(12.2), height=Inches(5), size=18)
 
-# ================ Slide 20: Thank you / Q&A ================
+# ================ Slide 19: Thank you / Q&A ================
 s = prs.slides.add_slide(BLANK)
 bar = s.shapes.add_shape(1, Inches(0), Inches(0), W, Inches(7.5))
 bar.fill.solid(); bar.fill.fore_color.rgb = DARK; bar.line.fill.background()
