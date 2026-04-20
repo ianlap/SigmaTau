@@ -19,6 +19,7 @@ node_modules/
 notebook.ipynb
 notebook.executed.ipynb
 notebook_exec.log
+retune.log
 
 # Dataset backups
 data/*.prev.h5

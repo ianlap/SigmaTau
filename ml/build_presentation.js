@@ -133,7 +133,7 @@ const TOTAL = 15;
     x: 5.2, y: 3.55, w: 4.4, h: 0.7, fontSize: 13, fontFace: FONT_B, italic: true, color: INK, margin: 0
   });
 
-  s.addText("Targets: log\u2081\u2080(q_wpm), log\u2081\u2080(q_wfm), log\u2081\u2080(q_rwfm)", {
+  s.addText("Targets: log\u2081\u2080(q0), log\u2081\u2080(q1), log\u2081\u2080(q2)", {
     x: 5.2, y: 4.35, w: 4.4, h: 0.4,
     fontSize: 12, fontFace: FONT_B, bold: true, color: NAVY, margin: 0
   });
@@ -343,9 +343,9 @@ const TOTAL = 15;
   });
 
   s.addText([
-    { text: "Targets span ~6 log decades (q_rwfm widest; q_wpm tightest)", options: { bullet: true, breakLine: true } },
-    { text: "Short-\u03C4 features (top row) correlate strongest with q_wpm", options: { bullet: true, breakLine: true } },
-    { text: "Long-\u03C4 features correlate with q_rwfm (log\u2081\u2080 q ~ \u221230)", options: { bullet: true, breakLine: true } },
+    { text: "Targets span ~6 log decades (q2 widest; q0 tightest)", options: { bullet: true, breakLine: true } },
+    { text: "Short-\u03C4 features (top row) correlate strongest with q0", options: { bullet: true, breakLine: true } },
+    { text: "Long-\u03C4 features correlate with q2 (log\u2081\u2080 q ~ \u221230)", options: { bullet: true, breakLine: true } },
     { text: "FPM-present samples (30%) have steeper short-\u03C4 slope", options: { bullet: true, breakLine: true } },
     { text: "NaN rate 0%; no outliers at |z|>5 \u2014 clean dataset", options: { bullet: true } }
   ], { x: 6.55, y: 1.70, w: 3.1, h: 3.3, fontSize: 10, fontFace: FONT_B, color: INK, paraSpaceAfter: 6, margin: 0 });
@@ -394,7 +394,7 @@ const TOTAL = 15;
 
   s.addText([
     { text: "Correlation pattern above: ", options: { bold: true, color: NAVY } },
-    { text: "short-\u03C4 features drive q_wpm; long-\u03C4 features drive q_rwfm. ", options: {} },
+    { text: "short-\u03C4 features drive q0; long-\u03C4 features drive q2. ", options: {} },
     { text: "Monotonic but nonlinear \u2014 justifies tree ensembles over linear regression.",
       options: { italic: true, color: MUTED } }
   ], { x: 5.40, y: 3.45, w: 4.3, h: 1.5, fontSize: 11, fontFace: FONT_B, color: INK, margin: 0 });
@@ -470,7 +470,7 @@ const TOTAL = 15;
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
-  addTitleBar(s, "Hyperparameter tuning", "5-fold GridSearchCV with explicit justification per parameter.");
+  addTitleBar(s, "Hyperparameter tuning", "Two-pass 5-fold GridSearchCV: expand, then re-center around boundary winners.");
 
   s.addText("Random Forest grid", {
     x: 0.4, y: 1.35, w: 4.5, h: 0.32,
@@ -480,10 +480,10 @@ const TOTAL = 15;
     [{ text: "Parameter", options: { bold: true, fill: { color: NAVY }, color: WHITE, fontSize: 10 } },
      { text: "Grid",      options: { bold: true, fill: { color: NAVY }, color: WHITE, fontSize: 10 } },
      { text: "Best",      options: { bold: true, fill: { color: NAVY }, color: WHITE, fontSize: 10 } }],
-    ["n_estimators",     "{200, 500, 1000}", "1000"],
-    ["max_depth",        "{None, 20, 30}",   "20"],
-    ["min_samples_leaf", "{3, 5, 10}",       "3"],
-    ["max_features",     "{sqrt, 0.5}",      "0.5"]
+    ["n_estimators",     "{1000, 1500, 2000}", "1000"],
+    ["max_depth",        "{20}",               "20"],
+    ["min_samples_leaf", "{1, 2, 3}",          "1"],
+    ["max_features",     "{0.5}",              "0.5"]
   ], {
     x: 0.4, y: 1.72, w: 4.5, colW: [1.55, 1.70, 1.25],
     rowH: 0.38, border: { pt: 0.5, color: "CCCCCC" },
@@ -498,10 +498,10 @@ const TOTAL = 15;
     [{ text: "Parameter", options: { bold: true, fill: { color: ACCENT }, color: WHITE, fontSize: 10 } },
      { text: "Grid",      options: { bold: true, fill: { color: ACCENT }, color: WHITE, fontSize: 10 } },
      { text: "Best",      options: { bold: true, fill: { color: ACCENT }, color: WHITE, fontSize: 10 } }],
-    ["n_estimators",  "{200, 500}",        "500"],
-    ["learning_rate", "{0.01, 0.05, 0.1}", "0.01"],
-    ["max_depth",     "{4, 6, 8}",         "6"],
-    ["subsample",     "{0.8, 1.0}",        "0.8"]
+    ["n_estimators",  "{500, 750, 1000}", "750"],
+    ["learning_rate", "{0.003, 0.01}",    "0.01"],
+    ["max_depth",     "{6}",              "6"],
+    ["subsample",     "{0.7, 0.8}",       "0.7"]
   ], {
     x: 5.10, y: 1.72, w: 4.5, colW: [1.55, 1.70, 1.25],
     rowH: 0.38, border: { pt: 0.5, color: "CCCCCC" },
@@ -517,11 +517,11 @@ const TOTAL = 15;
     fontSize: 12, fontFace: FONT_B, bold: true, color: NAVY, margin: 0
   });
   s.addText([
-    { text: "5-fold CV  \u2022  270 RF fits + 180 XGB fits  \u2022  ", options: {} },
-    { text: "scoring = ", options: {} },
-    { text: "neg_mean_squared_error", options: { bold: true } },
-    { text: " in log\u2081\u2080-q space  \u2022  ", options: {} },
-    { text: "seed = 42 for reproducibility", options: {} }
+    { text: "5-fold CV  \u2022  Pass 1 landed on boundaries (n_est top, lr bottom, subsample bottom)  \u2022  ", options: {} },
+    { text: "Pass 2 probe", options: { bold: true } },
+    { text: " = 45 RF + 60 XGB fits centered on pass-1 winners, extending past boundaries  \u2192  ", options: {} },
+    { text: "new winners are interior", options: { bold: true } },
+    { text: "; scoring = neg-MSE in log\u2081\u2080-q; seed = 42.", options: {} }
   ], { x: 0.6, y: 4.35, w: 9.0, h: 0.55,
       fontSize: 11, fontFace: FONT_B, color: INK, margin: 0 });
 
@@ -544,24 +544,24 @@ const TOTAL = 15;
       { text: "R\u00B2", options: { bold: true, fill: { color: NAVY }, color: WHITE, fontSize: 11 } },
       { text: "MAE",    options: { bold: true, fill: { color: NAVY }, color: WHITE, fontSize: 11 } }
     ],
-    ["q_wpm",  "Naive", "0.874", "0.000", "0.759"],
-    ["q_wpm",  "RF",    "0.069", "0.994", "0.052"],
-    ["q_wpm",  { text: "XGB", options: { bold: true, color: ACCENT } },
-               { text: "0.007", options: { bold: true, color: ACCENT } },
-               { text: "0.99993", options: { bold: true, color: ACCENT } },
-               { text: "0.006",  options: { bold: true, color: ACCENT } }],
-    ["q_wfm",  "Naive", "0.873", "0.000", "0.758"],
-    ["q_wfm",  "RF",    "0.090", "0.989", "0.065"],
-    ["q_wfm",  { text: "XGB", options: { bold: true, color: ACCENT } },
-               { text: "0.053", options: { bold: true, color: ACCENT } },
-               { text: "0.996", options: { bold: true, color: ACCENT } },
-               { text: "0.030", options: { bold: true, color: ACCENT } }],
-    ["q_rwfm", "Naive", "1.732", "0.000", "1.494"],
-    ["q_rwfm", "RF",    "0.784", "0.795", "0.551"],
-    ["q_rwfm", { text: "XGB", options: { bold: true, color: ACCENT } },
-               { text: "0.736", options: { bold: true, color: ACCENT } },
-               { text: "0.819", options: { bold: true, color: ACCENT } },
-               { text: "0.510", options: { bold: true, color: ACCENT } }]
+    ["q0",  "Naive", "0.874", "0.000", "0.759"],
+    ["q0",  "RF",    "0.047", "0.997", "0.034"],
+    ["q0",  { text: "XGB", options: { bold: true, color: ACCENT } },
+               { text: "0.004", options: { bold: true, color: ACCENT } },
+               { text: "0.99998", options: { bold: true, color: ACCENT } },
+               { text: "0.003",  options: { bold: true, color: ACCENT } }],
+    ["q1",  "Naive", "0.873", "0.000", "0.758"],
+    ["q1",  "RF",    "0.080", "0.992", "0.055"],
+    ["q1",  { text: "XGB", options: { bold: true, color: ACCENT } },
+               { text: "0.048", options: { bold: true, color: ACCENT } },
+               { text: "0.997", options: { bold: true, color: ACCENT } },
+               { text: "0.027", options: { bold: true, color: ACCENT } }],
+    ["q2", "Naive", "1.732", "0.000", "1.494"],
+    ["q2", "RF",    "0.786", "0.794", "0.552"],
+    ["q2", { text: "XGB", options: { bold: true, color: ACCENT } },
+               { text: "0.733", options: { bold: true, color: ACCENT } },
+               { text: "0.821", options: { bold: true, color: ACCENT } },
+               { text: "0.506", options: { bold: true, color: ACCENT } }]
   ], {
     x: 0.4, y: 1.35, w: 4.9, colW: [1.0, 0.8, 1.1, 1.1, 0.9],
     rowH: 0.32, border: { pt: 0.5, color: "CCCCCC" },
@@ -579,8 +579,8 @@ const TOTAL = 15;
   });
   s.addText([
     { text: "Headline: ", options: { bold: true, color: ACCENT } },
-    { text: "XGB \u2192 <0.05-dec RMSE on q_wpm & q_wfm (R\u00B2 \u2265 0.996); ", options: { color: WHITE } },
-    { text: "q_rwfm R\u00B2 = 0.82 ", options: { bold: true, color: WHITE } },
+    { text: "XGB \u2192 <0.05-dec RMSE on q0 & q1 (R\u00B2 \u2265 0.997); ", options: { color: WHITE } },
+    { text: "q2 R\u00B2 = 0.82 ", options: { bold: true, color: WHITE } },
     { text: "(vs 0.65 before switching labels from NLL \u2192 ALS).", options: { color: WHITE } }
   ], { x: 0.6, y: 4.38, w: 8.8, h: 0.5, fontSize: 12, fontFace: FONT_B, margin: 0 });
 
@@ -621,7 +621,7 @@ const TOTAL = 15;
   });
   s.addText([
     { text: "Empirical 90% PI coverage (XGB):\n", options: { fontSize: 11, color: WHITE, bold: true, breakLine: true } },
-    { text: "q_wpm 84%   q_wfm 81%   q_rwfm 81%", options: { fontSize: 13, color: WHITE, bold: true } }
+    { text: "q0 84%   q1 81%   q2 81%", options: { fontSize: 13, color: WHITE, bold: true } }
   ], { x: 6.35, y: 4.08, w: 3.2, h: 0.85, fontFace: FONT_B, margin: 0, align: "center" });
 
   addFooter(s, 11, TOTAL);
@@ -705,8 +705,8 @@ const TOTAL = 15;
     {
       x: 0.4, title: "What worked", color: NAVY,
       pts: [
-        "ALS labels \u2192 noise-free targets (key finding; lifted q_rwfm R\u00B2 from 0.65 \u2192 0.82)",
-        "XGB \u2192 sub-0.05-dec RMSE on q_wpm & q_wfm",
+        "ALS labels \u2192 noise-free targets (key finding; lifted q2 R\u00B2 from 0.65 \u2192 0.82)",
+        "XGB \u2192 0.004-dec RMSE on q0 (R\u00B2 = 0.99998); <0.05-dec on q1",
         "forestci + quantile UQ \u2192 80\u201384% empirical coverage of nominal 90% PIs",
         "Feature importance \u2192 MDEV quantitatively most informative (5\u00D7 MHDEV)"
       ]

@@ -159,10 +159,10 @@ is_big = n_train >= 1000
 
 if is_big:
     rf_grid = {
-        "n_estimators":     [200, 500, 1000],
-        "max_depth":        [None, 20, 30],
-        "min_samples_leaf": [3, 5, 10],
-        "max_features":     ["sqrt", 0.5],
+        "n_estimators":     [500, 1000, 1500, 2000],
+        "max_depth":        [15, 20, 25],
+        "min_samples_leaf": [1, 2, 3],
+        "max_features":     ["sqrt", 0.3, 0.5, 0.7],
     }
 else:
     # Reduced grid for small fixtures — still exercises the methodology
@@ -190,10 +190,10 @@ import xgboost as xgb
 
 if is_big:
     xgb_grid = {
-        "estimator__n_estimators":  [200, 500],
-        "estimator__learning_rate": [0.01, 0.05, 0.1],
-        "estimator__max_depth":     [4, 6, 8],
-        "estimator__subsample":     [0.8, 1.0],
+        "estimator__n_estimators":  [300, 500, 750, 1000],
+        "estimator__learning_rate": [0.003, 0.01, 0.03],
+        "estimator__max_depth":     [5, 6, 7],
+        "estimator__subsample":     [0.7, 0.8, 0.9],
     }
 else:
     xgb_grid = {
