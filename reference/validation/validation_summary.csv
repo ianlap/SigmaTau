@@ -1,0 +1,15 @@
+dev,ref,n,max_relerr,median_relerr
+adev,Stable32,12,4.65e-05,5.96e-06
+adev,allantools,12,1.67e-07,7.29e-08
+mdev,Stable32,12,4.65e-05,7.92e-06
+mdev,allantools,12,3.81e-07,7.43e-08
+tdev,Stable32,12,3.00e-05,3.53e-06
+tdev,allantools,12,2.09e-07,7.49e-08
+hdev,Stable32,12,2.77e-05,8.23e-06
+hdev,allantools,12,2.26e-07,6.02e-08
+totdev,Stable32,13,7.61e-01,1.57e-03
+totdev,allantools,13,7.61e-01,1.57e-03
+mtotdev,Stable32,12,2.37e-01,1.45e-01
+mtotdev,allantools,12,2.37e-01,1.45e-01
+htotdev,Stable32,12,2.31e-01,5.02e-03
+htotdev,allantools,12,2.29e-01,5.00e-03

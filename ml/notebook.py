@@ -455,19 +455,18 @@ if F_real is not None:
         print(f"  window {i}: {p}")
 
 # %%
-# Analytical ADEV from predicted KF q parameters (see ml/dataset/real_data_fit.jl)
-#   σ²_y(τ) ≈ 3·q_wpm/τ²  +  q_wfm/τ  +  q_rwfm·τ · const
-# Here we use the h-based formulation matched to the analytical warm-start:
-#   h_+2 = q_wpm · 2π² / f_h;   σ²_WPM(τ) = 3·f_h·h_+2/(4π²·τ²)
-#   h_0  = 2·q_wfm;             σ²_WFM(τ) = h_0/(2τ)
-#   h_-2 = 3·q_rwfm/(2π²);      σ²_RWFM(τ) = (2π²/3)·h_-2·τ
-def analytical_adev(q_wpm, q_wfm, q_rwfm, tau, f_h=0.5):
-    h_plus2  = q_wpm * 2 * np.pi**2 / f_h
-    h_0      = 2 * q_wfm
-    h_minus2 = 3 * q_rwfm / (2 * np.pi**2)
-    sigma2 = (3 * f_h * h_plus2 / (4 * np.pi**2 * tau**2)
-              + h_0 / (2 * tau)
-              + h_minus2 * (2 * np.pi**2 / 3) * tau)
+# Analytical ADEV from KF q parameters — Wu 2023 / real_data_fit.jl convention.
+# For τ₀=1 s (f_h = 1/(2τ₀) = 0.5 Hz):
+#   σ²_y,WPM(τ)  = 3·q_wpm / τ²
+#   σ²_y,WFM(τ)  = q_wfm / τ
+#   σ²_y,RWFM(τ) = q_rwfm · τ / 3
+# This matches the formulas used by mhdev_fit, optimize_nll, and als_fit so all
+# ADEV overlays in this notebook are numerically self-consistent.
+def analytical_adev(q_wpm, q_wfm, q_rwfm, tau):
+    tau = np.asarray(tau, dtype=float)
+    sigma2 = (3.0 * q_wpm / tau**2
+              + q_wfm / tau
+              + q_rwfm * tau / 3.0)
     return np.sqrt(np.maximum(sigma2, 0.0))
 
 if F_real is not None:
@@ -488,3 +487,99 @@ if F_real is not None:
     fig.tight_layout()
     fig.savefig(FIG_DIR / "real_data_overlay.png", dpi=150)
     plt.show()
+
+# %% [markdown]
+# ### 9b. Full method comparison on real data
+#
+# Per-window overlay of measured ADEV vs theoretical ADEV from six q-estimators:
+#   - **Naive**        — train-set mean of log10(q) (baseline)
+#   - **RF / XGB**     — ML predictions from 196-feature vector
+#   - **MHDEV fit**    — three-region slope fit on MHDEV (WPM 1–10 s, WFM 30–1000 s, RWFM 1e4–1e5 s)
+#   - **NLL**          — Kalman innovation-NLL optimum (warm-started from MHDEV fit)
+#   - **ALS**          — Autocovariance Least-Squares fit (warm-started from MHDEV fit)
+#
+# MHDEV/NLL/ALS fits are produced by `ml/dataset/real_data_all_fits.jl` (run separately).
+
+# %%
+FITS_CSV  = Path("data/real_per_window_fits.csv")
+ADEV_CSV  = Path("data/real_per_window_adev.csv")
+if F_real is not None and FITS_CSV.exists() and ADEV_CSV.exists():
+    fits_df = pd.read_csv(FITS_CSV)
+    adev_df = pd.read_csv(ADEV_CSV)
+
+    # Naive: train-set mean of log10(q) per target
+    q_naive = 10.0 ** ytr.mean(axis=0)   # length-3 vector
+
+    n_win = int(fits_df["window"].max()) + 1
+    n_show = min(n_win, len(windows))
+    fig, axes = plt.subplots(1, n_show, figsize=(5.2 * n_show, 5.2), sharey=True)
+    if n_show == 1:
+        axes = [axes]
+
+    # dense τ grid for smooth theoretical curves
+    tau_fine = np.logspace(0, 5, 60)
+
+    methods_color = {
+        "naive":    ("C7", ":",  1.3),
+        "RF":       ("C1", "--", 1.8),
+        "XGB":      ("C2", "--", 1.8),
+        "MHDEV fit": ("C3", "-.", 1.8),
+        "NLL":      ("C4", "-",  1.8),
+        "ALS":      ("C5", "-",  1.8),
+    }
+
+    for i, ax in enumerate(axes):
+        # Measured (long τ grid from Julia)
+        m = adev_df[adev_df["window"] == i]
+        ax.loglog(m["tau"], m["adev"], "o-", color="k", ms=4, lw=1.2,
+                  label="measured ADEV (Julia)")
+
+        row = fits_df[fits_df["window"] == i].iloc[0]
+
+        # Build per-method q triples
+        q_rf  = 10.0 ** pred_rf[i]
+        q_xgb = 10.0 ** pred_xgb[i]
+        q_map = {
+            "naive":     q_naive,
+            "RF":        q_rf,
+            "XGB":       q_xgb,
+            "MHDEV fit": np.array([row.mhf_qwpm, row.mhf_qwfm, row.mhf_qrwfm]),
+            "NLL":       np.array([row.nll_qwpm, row.nll_qwfm, row.nll_qrwfm]),
+            "ALS":       np.array([row.als_qwpm, row.als_qwfm, row.als_qrwfm]),
+        }
+        for label, q in q_map.items():
+            if not np.all(np.isfinite(q)):
+                continue
+            sig = analytical_adev(q[0], q[1], q[2], tau_fine)
+            c, ls, lw = methods_color[label]
+            ax.loglog(tau_fine, sig, ls=ls, lw=lw, color=c, label=label)
+
+        ax.set_title(f"window {i}")
+        ax.set_xlabel("τ (s)")
+        ax.grid(True, which="both", ls=":", alpha=0.4)
+    axes[0].set_ylabel("σ_y(τ)")
+    axes[0].legend(loc="best", fontsize=8, frameon=True)
+    fig.suptitle("GMR6000 Rb — measured ADEV vs theoretical ADEV from 6 q-estimators")
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / "real_data_method_comparison.png", dpi=150)
+    plt.show()
+
+    # Print per-window q-values for the record
+    print("\nPer-window q estimates (log10):")
+    cols = ["method", "q_wpm", "q_wfm", "q_rwfm"]
+    for i in range(n_show):
+        print(f"\n  ── window {i} ──")
+        row = fits_df[fits_df["window"] == i].iloc[0]
+        q_map = {
+            "naive":     ytr.mean(axis=0),
+            "RF":        pred_rf[i],
+            "XGB":       pred_xgb[i],
+            "MHDEV fit": np.log10(np.maximum([row.mhf_qwpm, row.mhf_qwfm, row.mhf_qrwfm], 1e-99)),
+            "NLL":       np.log10(np.maximum([row.nll_qwpm, row.nll_qwfm, row.nll_qrwfm], 1e-99)),
+            "ALS":       np.log10(np.maximum([row.als_qwpm, row.als_qwfm, row.als_qrwfm], 1e-99)),
+        }
+        for name, vec in q_map.items():
+            print(f"    {name:10s}  log10(q) = [{vec[0]:7.2f}, {vec[1]:7.2f}, {vec[2]:7.2f}]")
+else:
+    print("Skipping method comparison — missing real_per_window_fits.csv; "
+          "run `julia --project=ml/dataset ml/dataset/real_data_all_fits.jl` first.")
