@@ -265,6 +265,78 @@ using LinearAlgebra
             @test abs(s.x[1] - 100.0) < 5.0
             @test abs(s.x[2] - 1.0) < 0.5
         end
+
+        # (c) Non-clock state model — proves the architecture truly decouples
+        # from ClockNoiseParams and clock-specific assumptions. 2D constant-
+        # velocity tracker: state = [x, vx, y, vy], 2D position measurement.
+        @testset "non-clock state model (2D constant velocity)" begin
+            struct ConstantVelocityModel <: AbstractStateModel
+                tau::Float64
+                q_pos::Float64    # process noise diffusion on position
+                q_vel::Float64    # process noise diffusion on velocity
+            end
+            SigmaTau.nstates(::ConstantVelocityModel) = 4
+            function SigmaTau.build_phi(m::ConstantVelocityModel)
+                τ = m.tau
+                # block-diagonal: same kinematics in x and y.
+                Φ1 = [1.0 τ; 0.0 1.0]
+                Z  = zeros(2, 2)
+                return [Φ1 Z; Z Φ1]
+            end
+            function SigmaTau.build_Q(m::ConstantVelocityModel)
+                τ = m.tau
+                qp, qv = m.q_pos, m.q_vel
+                Q1 = [qp*τ + qv*τ^3/3   qv*τ^2/2;
+                      qv*τ^2/2           qv*τ]
+                Z = zeros(2, 2)
+                return [Q1 Z; Z Q1]
+            end
+
+            struct PositionMeasurement <: AbstractMeasurementModel
+                R::Matrix{Float64}    # 2×2
+            end
+            SigmaTau.build_H(::PositionMeasurement, ::ConstantVelocityModel, k::Int=0) =
+                [1.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0]
+            SigmaTau.measurement_R(m::PositionMeasurement, ::AbstractStateModel) = m.R
+            SigmaTau.measurement_dim(::PositionMeasurement) = 2
+
+            model = ConstantVelocityModel(1.0, 1e-4, 1e-3)
+            meas  = PositionMeasurement([0.04 0.0; 0.0 0.04])    # σ_pos = 0.2
+
+            # Ground-truth: object moving at (vx, vy) = (0.5, -0.3) from origin.
+            Random.seed!(2026)
+            N = 200
+            x_true = [0.5*k for k in 0:N-1]
+            y_true = [-0.3*k for k in 0:N-1]
+            σ_meas = 0.2
+
+            s = SigmaTau.FilterState(
+                x = [0.0, 0.0, 0.0, 0.0],
+                P = Matrix{Float64}(I, 4, 4) .* 10.0,
+                k = 0,
+            )
+
+            for k in 1:N
+                z = [x_true[k] + σ_meas*randn(),
+                     y_true[k] + σ_meas*randn()]
+                _, ν, S = SigmaTau.filter_step!(s, model, meas, z)
+                @test length(ν) == 2
+                @test size(S) == (2, 2)
+                @test all(isfinite, s.x)
+            end
+
+            # Final state should match ground truth: position within a few σ,
+            # velocity converged to (0.5, -0.3).
+            @test abs(s.x[1] - x_true[end]) < 2.0           # x position
+            @test abs(s.x[2] - 0.5)         < 0.05          # x velocity
+            @test abs(s.x[3] - y_true[end]) < 2.0           # y position
+            @test abs(s.x[4] - (-0.3))      < 0.05          # y velocity
+
+            # PSD covariance throughout (already checked per-step above; assert
+            # final too).
+            @test isapprox(s.P, s.P', atol=1e-12)
+            @test minimum(eigvals(Symmetric(s.P))) > -1e-10
+        end
     end
 
 end  # @testset "Kalman filter"
