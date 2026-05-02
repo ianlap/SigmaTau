@@ -191,4 +191,80 @@ using LinearAlgebra
         @test abs(log10(res.noise.q_rwfm) - log10(expected.q_rwfm)) < 0.3
     end
 
+    # ── Pluggable measurement-model interface (Phase 2) ──────────────────────
+    @testset "Pluggable measurement model" begin
+
+        # (a) Bit-identical regression: defaulting to PhaseOnlyMeasurement()
+        # must reproduce the pre-Phase-2 KalmanResult byte-for-byte.
+        @testset "kalman_filter bit-identical with explicit PhaseOnlyMeasurement" begin
+            Random.seed!(2024)
+            data = cumsum(randn(1500))
+            noise = ClockNoiseParams(q_wfm=1.0, q_rwfm=1e-4, q_wpm=1.0)
+
+            for model in (ClockModel2(noise=noise, tau=tau0),
+                          ClockModel3(noise=noise, tau=tau0),
+                          ClockModelDiurnal(noise=noise, tau=tau0, q_diurnal=1e-4))
+                res_old = kalman_filter(data, model; g_p=0.1, g_i=0.01, g_d=0.05, P0=1e4)
+                res_new = kalman_filter(data, model, PhaseOnlyMeasurement();
+                                        g_p=0.1, g_i=0.01, g_d=0.05, P0=1e4)
+                @test res_new.phase_est   == res_old.phase_est
+                @test res_new.freq_est    == res_old.freq_est
+                @test res_new.drift_est   == res_old.drift_est
+                @test res_new.innovations == res_old.innovations
+                @test res_new.residuals   == res_old.residuals
+                @test res_new.steers      == res_old.steers
+                @test res_new.P_history   == res_old.P_history
+            end
+        end
+
+        @testset "innovation_nll perf-shim routes ClockModel3+PhaseOnly to fast path" begin
+            Random.seed!(123)
+            x = cumsum(randn(2048))
+            noise = ClockNoiseParams(q_wpm=1.0, q_wfm=0.5, q_rwfm=1e-4)
+            m3 = ClockModel3(noise=noise, tau=1.0)
+            # 2-arg and 3-arg forms must agree exactly.
+            @test innovation_nll(x, m3) == innovation_nll(x, m3, PhaseOnlyMeasurement())
+            # 2-arg fallback for ClockModel2 also routes through PhaseOnly.
+            m2 = ClockModel2(noise=noise, tau=1.0)
+            @test innovation_nll(x, m2) == innovation_nll(x, m2, PhaseOnlyMeasurement())
+        end
+
+        # (b) Vector-measurement smoke: define a 2D phase+freq measurement
+        # and exercise the matrix kernel through filter_step! directly.
+        @testset "vector measurement (phase+freq) drives matrix kernel" begin
+            struct PhaseFreqMeasurement <: AbstractMeasurementModel
+                R::Matrix{Float64}
+            end
+            SigmaTau.build_H(::PhaseFreqMeasurement, ::ClockModel3, k::Int=0) =
+                [1.0 0.0 0.0; 0.0 1.0 0.0]
+            SigmaTau.measurement_R(meas::PhaseFreqMeasurement, ::AbstractStateModel) = meas.R
+            SigmaTau.measurement_dim(::PhaseFreqMeasurement) = 2
+
+            noise = ClockNoiseParams(q_wpm=0.0, q_wfm=1e-4, q_rwfm=0.0)
+            model = ClockModel3(noise=noise, tau=1.0)
+            meas  = PhaseFreqMeasurement([0.01 0.0; 0.0 0.001])
+
+            s = SigmaTau.FilterState(x=zeros(3), P=Matrix{Float64}(I, 3, 3) .* 10.0, k=0)
+            tr_init = sum(diag(s.P))
+
+            Random.seed!(11)
+            for k in 1:100
+                z = [Float64(k), 1.0] .+ [0.1, 0.01] .* randn(2)
+                _, ν, S = SigmaTau.filter_step!(s, model, meas, z)
+                @test length(ν) == 2
+                @test size(S) == (2, 2)
+                @test all(isfinite, s.x)
+                @test all(isfinite, s.P)
+                @test isapprox(s.P, s.P', atol=1e-12)   # symmetric
+                # PSD: smallest eigenvalue ≥ -ε
+                λmin = minimum(eigvals(Symmetric(s.P)))
+                @test λmin > -1e-10
+            end
+            @test sum(diag(s.P)) < tr_init  # uncertainty shrank
+            # State should track the linear ramp + unit frequency.
+            @test abs(s.x[1] - 100.0) < 5.0
+            @test abs(s.x[2] - 1.0) < 0.5
+        end
+    end
+
 end  # @testset "Kalman filter"

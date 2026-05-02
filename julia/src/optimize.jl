@@ -132,30 +132,23 @@ function innovation_nll(data::Vector{Float64}, m::ClockModel3)::Float64
     return nll
 end
 
-function innovation_nll(data::Vector{Float64}, m::Union{ClockModel2, ClockModelDiurnal})::Float64
+function innovation_nll(data::Vector{Float64}, m::AbstractStateModel,
+                        meas::AbstractMeasurementModel)::Float64
     N = length(data)
     ns = nstates(m)
-    τ = m.tau
-    
+
     Φ = build_phi(m)
     Q = build_Q(m)
-    R = m.noise.q_wpm
+    R = measurement_R(meas, m)
 
-    H_base = build_H(m) # For diurnal, we handle k later. Wait, for _dare, diurnal is problematic if H varies.
-    # Actually, dare doesn't support diurnal. We use Q as init placeholder.
+    H_base = build_H(meas, m, 0)
+    # _dare only converges for time-invariant H; diurnal uses Q as a placeholder seed.
     P = m isa ClockModel2 ? _dare_scalar_H(Φ, Q, R) : Matrix{Float64}(Q)
     x = zeros(Float64, ns)
     nll = 0.0
-    twopi = 2π
-    period = m isa ClockModelDiurnal ? m.period : 86400.0
 
     for k in 1:N
-        if m isa ClockModelDiurnal
-            H = zeros(Float64, 1, 5)
-            H[1,1] = 1.0; H[1,4] = sin(twopi*k/period); H[1,5] = cos(twopi*k/period)
-        else
-            H = H_base
-        end
+        H = m isa ClockModelDiurnal ? build_H(meas, m, k) : H_base
 
         if k > 1
             x = Φ * x
@@ -175,6 +168,15 @@ function innovation_nll(data::Vector{Float64}, m::Union{ClockModel2, ClockModelD
     end
     return nll
 end
+
+# 2-arg back-compat: defaults to PhaseOnlyMeasurement.
+innovation_nll(data::Vector{Float64}, m::AbstractStateModel)::Float64 =
+    innovation_nll(data, m, PhaseOnlyMeasurement())
+
+# Perf shim: the ClockModel3 + PhaseOnly fast path stays the StaticArrays
+# kernel, even when callers pass meas explicitly (e.g. optimize_nll inner loop).
+innovation_nll(data::Vector{Float64}, m::ClockModel3, ::PhaseOnlyMeasurement)::Float64 =
+    innovation_nll(data, m)
 
 """
     OptimizeNLLResult
@@ -219,7 +221,9 @@ function optimize_nll(data::AbstractVector{<:Real}, tau0::Real;
                       optimize_irwfm::Bool = false,
                       verbose::Bool = true,
                       max_iter::Int = 500,
-                      tol::Float64 = 1e-6)
+                      tol::Float64 = 1e-6,
+                      state_ctor::Union{Function,Nothing} = nothing,
+                      meas::AbstractMeasurementModel = PhaseOnlyMeasurement())
     
     if noise_init === nothing
         if h_init !== nothing
@@ -251,8 +255,9 @@ function optimize_nll(data::AbstractVector{<:Real}, tau0::Real;
         q_rwfm = 10.0^th[idx]; idx += 1
         q_irwfm = optimize_irwfm ? 10.0^th[idx] : noise_init.q_irwfm
 
-        m = ClockModel3(noise=ClockNoiseParams(q_wpm, q_wfm, q_rwfm, q_irwfm), tau=tau0)
-        return innovation_nll(Vector{Float64}(data), m)
+        n = ClockNoiseParams(q_wpm, q_wfm, q_rwfm, q_irwfm)
+        m = state_ctor === nothing ? ClockModel3(noise=n, tau=tau0) : state_ctor(n)
+        return innovation_nll(Vector{Float64}(data), m, meas)
     end
 
     theta_opt, nll_opt, n_evals, converged = _nelder_mead(obj, theta0; max_iter=max_iter, tol=tol)

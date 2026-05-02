@@ -31,7 +31,9 @@ function als_fit(data::AbstractVector{<:Real}, tau0::Real;
                  noise_init::Union{ClockNoiseParams, Nothing}=nothing,
                  optimize_qwpm::Bool = false,
                  optimize_irwfm::Bool = false,
-                 lags::Int = 30, max_iter::Int = 5, burn_in::Int = 50, verbose::Bool = true)
+                 lags::Int = 30, max_iter::Int = 5, burn_in::Int = 50, verbose::Bool = true,
+                 state_ctor::Union{Function,Nothing} = nothing,
+                 meas::AbstractMeasurementModel = PhaseOnlyMeasurement())
     
     if noise_init === nothing
         if h_init !== nothing
@@ -55,7 +57,8 @@ function als_fit(data::AbstractVector{<:Real}, tau0::Real;
         if verbose
             println("\n--- ALS Iteration $iter ---")
         end
-        n_out = _als_iteration(data, tau0, current_noise, lags, burn_in, optimize_qwpm, optimize_irwfm)
+        n_out = _als_iteration(data, tau0, current_noise, lags, burn_in, optimize_qwpm, optimize_irwfm,
+                               state_ctor, meas)
         
         if verbose
             optimize_qwpm && println("  q_wpm   = $(round(n_out.q_wpm, sigdigits=3))")
@@ -79,15 +82,24 @@ end
 
 
 function _als_iteration(data::AbstractVector{<:Real}, tau0::Real, noise_current::ClockNoiseParams,
-                        lags::Int, burn_in::Int, opt_wpm::Bool, opt_irwfm::Bool)
+                        lags::Int, burn_in::Int, opt_wpm::Bool, opt_irwfm::Bool,
+                        state_ctor::Union{Function,Nothing} = nothing,
+                        meas::AbstractMeasurementModel = PhaseOnlyMeasurement())
+    # The basis decomposition over (q_wpm, q_wfm, q_rwfm, q_irwfm) is
+    # specific to the clock SDE and to scalar phase observation. Other
+    # measurement models would need their own basis.
+    meas isa PhaseOnlyMeasurement || error("als_fit currently supports only PhaseOnlyMeasurement")
+
+    ctor = state_ctor === nothing ? (n -> ClockModel3(noise=n, tau=tau0)) : state_ctor
+
     N = length(data)
-    m = ClockModel3(noise=noise_current, tau=tau0)
-    
+    m = ctor(noise_current)
+
     # Run KF to extract innovation sequence
-    res = kalman_filter(data, m)
+    res = kalman_filter(data, m, meas)
     inns = @view res.innovations[min(burn_in+1, N):end]
     Nk = length(inns)
-    
+
     # Empirical autocovariance sequence
     C_hat = zeros(lags + 1)
     for j in 0:lags
@@ -97,13 +109,13 @@ function _als_iteration(data::AbstractVector{<:Real}, tau0::Real, noise_current:
         end
         C_hat[j+1] = s / (Nk - j)
     end
-    
+
     # Base KF properties
     P_inf = steady_state_covariance(m)
     Phi = build_phi(m)
-    H = build_H(m)
-    R_current = noise_current.q_wpm
-    
+    H = build_H(meas, m, 0)
+    R_current = measurement_R(meas, m)
+
     S = (H * P_inf * H')[1,1] + R_current
     K = (P_inf * H') ./ S
     Abar = Phi - K * H
@@ -124,7 +136,7 @@ function _als_iteration(data::AbstractVector{<:Real}, tau0::Real, noise_current:
         p_dict = Dict(:q_wpm => 0.0, :q_wfm => 0.0, :q_rwfm => 0.0, :q_irwfm => 0.0)
         p_dict[k] = 1.0
         
-        Q_b = build_Q(ClockModel3(noise=ClockNoiseParams(p_dict[:q_wpm], p_dict[:q_wfm], p_dict[:q_rwfm], p_dict[:q_irwfm]), tau=tau0))
+        Q_b = build_Q(ctor(ClockNoiseParams(p_dict[:q_wpm], p_dict[:q_wfm], p_dict[:q_rwfm], p_dict[:q_irwfm])))
         R_b = p_dict[:q_wpm]
         
         vec_P = pinv_A * vec(Q_b .+ K * R_b * K')

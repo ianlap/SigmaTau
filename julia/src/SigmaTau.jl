@@ -14,6 +14,9 @@ blocks below for the full list):
   `MHDevFitRegion`.
 - **Noise generation (Kasdin & Walter):** `generate_power_law_noise`,
   `generate_composite_noise`.
+- **Pluggable model interface:** `AbstractStateModel`, `AbstractMeasurementModel`,
+  `AbstractNoiseParams`, `PhaseOnlyMeasurement`. Subtype these to plug in a custom
+  dynamics / measurement / noise parameterization (e.g. lunar PNT).
 - **Clock models:** `ClockNoiseParams`, `ClockModel2`, `ClockModel3`,
   `ClockModelDiurnal`, `build_phi`, `build_Q`, `build_H`, `nstates`,
   `sigma_y_theory`, `steady_state_covariance`, `steady_state_gain`.
@@ -49,6 +52,8 @@ export kf_filter                                   # alias for kalman_filter
 export HoldoverResult, predict_holdover
 export optimize_nll, innovation_nll, als_fit, OptimizeNLLResult
 export kf_residual_diagnostics, KFDiagnosticsResult
+export AbstractStateModel, AbstractMeasurementModel, AbstractNoiseParams
+export PhaseOnlyMeasurement, measurement_R, measurement_dim
 export ClockNoiseParams, ClockModel2, ClockModel3, ClockModelDiurnal
 export build_phi, build_Q, build_H, sigma_y_theory, h_to_q, q_to_h, steady_state_covariance, steady_state_gain, nstates
 export generate_power_law_noise

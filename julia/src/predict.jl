@@ -15,12 +15,12 @@ covariance history over the prediction horizon.
 - `P_pred`     — ns x ns x horizon covariance history
 - `model`      — the clock model used for propagation
 """
-struct HoldoverResult
+struct HoldoverResult{M<:AbstractStateModel}
     phase_pred::Vector{Float64}
     freq_pred::Vector{Float64}
     drift_pred::Vector{Float64}
     P_pred::Array{Float64, 3}
-    model
+    model::M
 end
 
 """
@@ -37,7 +37,7 @@ ClockModelDiurnal.
 - `horizon::Int` — number of prediction steps
 """
 function predict_holdover(x0::Vector{Float64}, P0::Matrix{Float64},
-                          model, horizon::Int)
+                          model::AbstractStateModel, horizon::Int)
     horizon >= 1 || error("predict_holdover: horizon must be >= 1")
     ns = nstates(model)
     length(x0) == ns || error("predict_holdover: x0 length $(length(x0)) != nstates $ns")

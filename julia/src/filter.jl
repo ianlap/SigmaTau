@@ -8,7 +8,7 @@ using Statistics
 
 Output of `kalman_filter`. `P_history[k]` is the posterior covariance at step k.
 """
-struct KalmanResult
+struct KalmanResult{M<:AbstractStateModel}
     phase_est::Vector{Float64}
     freq_est::Vector{Float64}
     drift_est::Vector{Float64}
@@ -18,7 +18,7 @@ struct KalmanResult
     sumsteers::Vector{Float64}
     sum2steers::Vector{Float64}
     P_history::Array{Float64, 3}
-    model::Union{ClockModel2, ClockModel3, ClockModelDiurnal}
+    model::M
 end
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -39,29 +39,26 @@ Base.@kwdef mutable struct FilterState
 end
 
 """
-    filter_step!(s::FilterState, m::Union{ClockModel2, ClockModel3, ClockModelDiurnal}, z_k::Float64, u_corr::Vector{Float64}=Float64[]) -> (state, innovation, innovation_variance)
+    filter_step!(s, m, meas, z_k::Real, u_corr=Float64[]) -> (state, innovation, innovation_variance)
+    filter_step!(s, m, meas, z_k::AbstractVector, u_corr=Float64[]) -> (state, innovation, innovation_covariance)
 
-One KF predict+update cycle. Pure estimation.
+One KF predict+update cycle. The scalar-`z_k` method preserves the original
+math byte-for-byte under the default `PhaseOnlyMeasurement()`; the vector
+method runs the matrix kernel for non-phase-only measurement models.
 """
-function filter_step!(s::FilterState, m::Union{ClockModel2, ClockModel3, ClockModelDiurnal}, z_k::Float64, u_corr::Vector{Float64}=Float64[])
+function filter_step!(s::FilterState, m::AbstractStateModel,
+                      meas::AbstractMeasurementModel, z_k::Real,
+                      u_corr::Vector{Float64}=Float64[])
     s.k += 1
     Φ = build_phi(m)
     Q = build_Q(m)
-    
-    twopi = 2π
-    if m isa ClockModelDiurnal
-        H = zeros(Float64, 1, 5)
-        H[1, 1] = 1.0
-        H[1, 4] = sin(twopi * s.k / m.period)
-        H[1, 5] = cos(twopi * s.k / m.period)
-    else
-        H = build_H(m)
-    end
-    
+
+    H = build_H(meas, m, s.k)
+
     x = s.x
     P = s.P
-    R = m.noise.q_wpm
-    
+    R = measurement_R(meas, m)
+
     if s.k > 1
         x = Φ * x
         if !isempty(u_corr)
@@ -72,23 +69,66 @@ function filter_step!(s::FilterState, m::Union{ClockModel2, ClockModel3, ClockMo
         end
         P = Symmetric(Φ * Matrix(P) * Φ' + Q)
     end
-    
+
     ν = z_k - (H * x)[1]
-    
+
     Pm = Matrix(P)
     S = (H * Pm * H')[1,1] + R
     K = (Pm * H') / S
     x = x + K[:,1] .* ν
     Pm = (I - K * H) * Pm
     Pm = (Pm + Pm') ./ 2.0   # Symmetrize to match MATLAB exactly
-    
+
     for i in 1:length(x)
         Pm[i, i] = safe_sqrt(Pm[i, i])^2
     end
-    
+
     s.x = x
     s.P = Matrix(Symmetric(Pm))
-    
+
+    return s, ν, S
+end
+
+function filter_step!(s::FilterState, m::AbstractStateModel,
+                      meas::AbstractMeasurementModel, z_k::AbstractVector,
+                      u_corr::Vector{Float64}=Float64[])
+    s.k += 1
+    Φ = build_phi(m)
+    Q = build_Q(m)
+
+    H = build_H(meas, m, s.k)
+    R = measurement_R(meas, m)
+    R_mat = R isa AbstractMatrix ? R : reshape([float(R)], 1, 1)
+
+    x = s.x
+    P = s.P
+
+    if s.k > 1
+        x = Φ * x
+        if !isempty(u_corr)
+            x[1] += u_corr[1]
+            if length(x) >= 2 && length(u_corr) >= 2
+                x[2] += u_corr[2]
+            end
+        end
+        P = Symmetric(Φ * Matrix(P) * Φ' + Q)
+    end
+
+    Pm = Matrix(P)
+    ν = Vector(z_k) .- (H * x)
+    S = H * Pm * H' + R_mat
+    K = (Pm * H') / S
+    x = x + K * ν
+    Pm = (I - K * H) * Pm
+    Pm = (Pm + Pm') ./ 2.0
+
+    for i in 1:length(x)
+        Pm[i, i] = safe_sqrt(Pm[i, i])^2
+    end
+
+    s.x = x
+    s.P = Matrix(Symmetric(Pm))
+
     return s, ν, S
 end
 
@@ -142,11 +182,17 @@ end
 # ── Main function ─────────────────────────────────────────────────────────────
 
 """
-    kalman_filter(data, model; x0=Float64[], P0=1e6, g_p=0.1, g_i=0.01, g_d=0.05) -> KalmanResult
+    kalman_filter(data, model, meas=PhaseOnlyMeasurement();
+                  x0=Float64[], P0=1e6, g_p=0.1, g_i=0.01, g_d=0.05) -> KalmanResult
 
-Run the Kalman filter on `data` using `model`.
+Run the Kalman filter on scalar phase `data` using state `model` and
+measurement model `meas`. The default `PhaseOnlyMeasurement()` reproduces the
+pre-Phase-2 behavior bit-for-bit. The public entry only commits to scalar
+measurements; vector measurements are exercised through `filter_step!`
+directly.
 """
-function kalman_filter(data::Vector{Float64}, model;
+function kalman_filter(data::Vector{Float64}, model,
+                       meas::AbstractMeasurementModel = PhaseOnlyMeasurement();
                        x0::Vector{Float64} = Float64[],
                        P0::Union{Float64, Matrix{Float64}} = 1e6,
                        g_p::Float64 = 0.1, g_i::Float64 = 0.01, g_d::Float64 = 0.05)
@@ -173,8 +219,6 @@ function kalman_filter(data::Vector{Float64}, model;
     size(P_init) == (ns, ns) || error("P0 size must be ($ns,$ns)")
 
     N = length(data)
-    R = model.noise.q_wpm
-    twopi = 2π
 
     state     = FilterState(x=copy(actual_x0), P=Matrix(Symmetric(P_init)), k=0)
     pid       = PIDController(g_p=g_p, g_i=g_i, g_d=g_d)
@@ -198,7 +242,7 @@ function kalman_filter(data::Vector{Float64}, model;
             phase[k] = phase[k-1] + data[k] - data[k-1] + sumsteers_v[k-1]
         end
 
-        _, innov, _ = filter_step!(state, model, phase[k], u_corr)
+        _, innov, _ = filter_step!(state, model, meas, phase[k], u_corr)
         x = state.x
         P = state.P
 

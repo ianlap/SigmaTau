@@ -3,6 +3,39 @@
 using LinearAlgebra: I, norm
 using StaticArrays: SMatrix, SVector, @SMatrix, @SVector
 
+# ── Abstract type hierarchy (Phase 1: pluggable model architecture) ──────────
+#
+# These supertypes let downstream callers (e.g. lunar PNT, range-measurement
+# fusion) plug in their own dynamics, measurement models, and noise
+# parameterizations without modifying the filter loop. The existing clock
+# models are unchanged in behavior — they're just one implementation of the
+# interface.
+
+"""
+    AbstractStateModel
+
+Supertype for any linear-Gaussian state-space dynamics consumed by the KF.
+Subtypes must implement `nstates(::M)`, `build_phi(::M)`, and `build_Q(::M)`.
+"""
+abstract type AbstractStateModel end
+
+"""
+    AbstractMeasurementModel
+
+Supertype for measurement models. Subtypes must implement `build_H(::M, ...)`
+and provide a measurement-noise covariance (scalar or matrix).
+"""
+abstract type AbstractMeasurementModel end
+
+"""
+    AbstractNoiseParams
+
+Supertype for process-noise parameterizations. The current clock-SDE noise
+(`ClockNoiseParams`) is one instance; lunar/orbit dynamics will introduce
+others.
+"""
+abstract type AbstractNoiseParams end
+
 """
     ClockNoiseParams
 
@@ -10,7 +43,7 @@ The 3-to-4 noise diffusion coefficients of the canonical clock SDE
 (Zucca-Tavella 2005, Eq 1). WPM enters as measurement noise R;
 WFM/RWFM/IRWFM enter as state-noise diffusions.
 """
-Base.@kwdef struct ClockNoiseParams
+Base.@kwdef struct ClockNoiseParams <: AbstractNoiseParams
     q_wpm::Float64                  # R = σ₀² (WPM, measurement)
     q_wfm::Float64                  # σ₁² (WFM, state)
     q_rwfm::Float64      = 0.0      # σ₂² (RWFM, state); 0 to disable
@@ -23,7 +56,7 @@ end
 3-state linear-Gaussian clock model: (phase, frequency, drift).
 Canonical case; matches Zucca-Tavella 2005 Eq 1 with σ₃² enabled.
 """
-Base.@kwdef struct ClockModel3
+Base.@kwdef struct ClockModel3 <: AbstractStateModel
     noise::ClockNoiseParams
     tau::Float64
 end
@@ -33,7 +66,7 @@ end
 
 2-state: (phase, frequency). Drift is deterministic or absent.
 """
-Base.@kwdef struct ClockModel2
+Base.@kwdef struct ClockModel2 <: AbstractStateModel
     noise::ClockNoiseParams
     tau::Float64
 end
@@ -43,12 +76,20 @@ end
 
 5-state: (phase, frequency, drift, diurnal-sin, diurnal-cos).
 """
-Base.@kwdef struct ClockModelDiurnal
+Base.@kwdef struct ClockModelDiurnal <: AbstractStateModel
     noise::ClockNoiseParams
     tau::Float64
     period::Float64       = 86400.0
     q_diurnal::Float64    = 0.0
 end
+
+"""
+    PhaseOnlyMeasurement
+
+Scalar phase-observation model used by all clock filters: H = [1 0 …].
+Extracted from the implicit behavior baked into the original filter.
+"""
+struct PhaseOnlyMeasurement <: AbstractMeasurementModel end
 
 nstates(::ClockModel2) = 2
 nstates(::ClockModel3) = 3
@@ -115,12 +156,30 @@ function build_H(m::ClockModelDiurnal, k::Int)
     return H
 end
 
+# ── Measurement-model interface (Phase 2) ────────────────────────────────────
+#
+# Three traits any AbstractMeasurementModel must implement:
+#   build_H(meas, state, k=0) -> AbstractMatrix   (1×ns for scalar; m×ns for vector)
+#   measurement_R(meas, state) -> Real or AbstractMatrix
+#   measurement_dim(meas) -> Int
+#
+# PhaseOnlyMeasurement delegates to the existing state-side build_H methods and
+# reads R from state.noise.q_wpm — preserves bit-identical behavior of the
+# pre-Phase-2 filter.
+
+build_H(::PhaseOnlyMeasurement, m::ClockModel2, k::Int=0) = build_H(m)
+build_H(::PhaseOnlyMeasurement, m::ClockModel3, k::Int=0) = build_H(m)
+build_H(::PhaseOnlyMeasurement, m::ClockModelDiurnal, k::Int=0) = build_H(m, k)
+
+measurement_R(::PhaseOnlyMeasurement, m::AbstractStateModel) = m.noise.q_wpm
+measurement_dim(::PhaseOnlyMeasurement) = 1
+
 """
     sigma_y_theory(model, tau) -> Float64
 
 Theoretical Allan deviation σ_y(τ) corresponding to the clock SDE model.
 """
-function sigma_y_theory(m::Union{ClockModel2, ClockModel3, ClockModelDiurnal}, tau::Float64)
+function sigma_y_theory(m::AbstractStateModel, tau::Float64)
     noise = m.noise
     R = noise.q_wpm
     q_wfm = noise.q_wfm
